@@ -1,0 +1,177 @@
+#!/usr/bin/env python
+#
+# State machine:
+#  Search
+#  Drive
+#  Pause/Offer
+#  Drive Away
+#
+# Sub states:
+#  Search
+#   Turn left (60 deg)
+#   Pause
+#   Repeat
+#
+#  Drive
+#   Drive towards face (/roi)
+#    limit on size of face, angle to face
+#
+#  Pause/Offer
+#   Play sounds
+#   Wait 30 seconds
+#
+#  Drive Away
+#   Turn 120 deg
+#   Drive N seconds
+#
+# Input topics:
+#  /roi - face position in image
+#       - convert to angle and use for visual servoing
+#       - what is our output like if the detector isn't picking up a face?
+#  /odom - robot odometry
+#
+# Parameters:
+#  ?camera FOV: field-of-fiew of camera, used for servoing?
+#
+#  search angle: angle to turn during search phase
+#  search time: time to pause while searching
+#
+#  drive timeout: timeout when chasing a person
+#  angle_p: porportion for angular motion
+#  target_size: face target size (width in pixels)
+#  target_p: porportion for size tracking
+#
+#  pause time: time to pause while offering a drink
+#  offer_files: a list of sound files to play while offering a drink
+#
+#  return angle: turn angle serving a drink
+#  return distance: distance to drive after serving a drink
+
+
+# States
+SEARCH=0
+DRIVE=1
+PAUSE=2
+AWAY=3
+
+import roslib ; roslib.load_manifest('partybot')
+import rospy
+from sound_play.libsoundplay import SoundClient
+from dynamic_reconfigure.server import Server
+
+from partybot.cfg import PartybotConfig
+from sensor_msgs.msg import *
+from geometry_msgs.msg import Twist
+
+class Partybot:
+    def __init__(self):
+        rospy.init_node("partybot")
+        self.config = None
+        self.cfg_srv = Server(PartybotConfig, self.cfg_callback)
+        self.roi_sub = rospy.Subscriber("roi", RegionOfInterest,
+                self.roi_callback)
+
+        self.cmd_pub = rospy.Publisher("cmd_vel", Twist)
+
+        self.sounds = rospy.get_param("sounds", [])
+
+        self.state = SEARCH
+        self.drive_start = rospy.Time(0)
+        self.last_face = rospy.Time(0)
+    
+
+    def cfg_callback(self, config, level):
+        self.config = config
+        return config
+
+    def roi_callback(self, roi):
+        now = rospy.Time.now()
+        self.last_face = now
+        if self.state == SEARCH:
+            rospy.loginfo("Got ROI")
+            self.state = DRIVE
+            self.drive_start = now
+
+        if self.state == DRIVE:
+            # Target tracking
+            target_offset_x = roi.x_offset + roi.width / 2 - self.config.image_width / 2
+            target_offset_y = roi.y_offset + roi.height / 2 - self.config.image_height / 2
+            # size_offset > 0 -> forward
+            size_offset = self.config.target_size - roi.width
+
+            try:
+                percent_offset_x = float(target_offset_x) / float(self.config.image_width)
+                percent_offset_y = float(target_offset_y) / float(self.config.image_height)
+                percent_offset_size = float(size_offset) / float(self.config.target_size)
+            except:
+                percent_offset_x = 0
+                percent_offset_y = 0
+                percent_offset_size = 0
+
+            cmd = Twist()
+
+            if abs(percent_offset_x) > self.config.image_x_thresh:
+                speed = self.config.angle_gain * percent_offset_x
+                if speed < 0:
+                    direction = -1
+                else:
+                    direction = 1
+                cmd.angular.z = -direction * max(
+                        self.config.min_angular_speed, min(
+                            self.config.max_angular_speed,
+                            abs(speed)))
+            else:
+                cmd.angular.z = 0
+
+            if abs(percent_offset_size) > self.config.image_size_thresh:
+                speed = self.config.target_gain * percent_offset_size
+                if speed < 0:
+                    direction = -1
+                else:
+                    direction = 1
+
+                cmd.linear.x = direction * max(
+                        self.config.min_linear_speed, min(
+                            self.config.max_linear_speed,
+                            abs(speed)))
+                #cmd.linear.x = speed
+            else:
+                cmd.linear.x = 0
+
+            self.cmd_pub.publish(cmd)
+
+
+
+    def main(self):
+        while self.config == None:
+            rospy.loginfo("Waiting for initial config")
+            rospy.sleep(1)
+
+        while not rospy.is_shutdown():
+            now = rospy.Time.now()
+            if self.state == SEARCH:
+                rospy.loginfo("Searching...")
+            elif self.state == DRIVE:
+                rospy.loginfo("Driving...")
+                if (now - self.last_face).to_sec() > self.config.face_timeout:
+                    rospy.loginfo("Lost Face.")
+                    self.state = SEARCH
+                if (now - self.drive_start).to_sec() > self.config.drive_timeout:
+                    rospy.loginfo("Person Following Timed out")
+                    self.state = AWAY
+                    self.away_start = now
+            elif self.state == PAUSE:
+                # TODO
+                rospy.loginfo("Pausing...")
+            else:   
+                rospy.loginfo("Away...")
+                # TODO
+                if (now - self.away_start).to_sec() > 10:
+                    self.state = SEARCH
+            rospy.sleep(1)
+    
+        rospy.loginfo("Partybot Exiting")
+
+if __name__ == '__main__':
+    bot = Partybot()
+    bot.main()
