@@ -56,8 +56,9 @@ AWAY=3
 
 import roslib ; roslib.load_manifest('partybot')
 import rospy
+import threading
+import random
 import os
-from sound_play.libsoundplay import SoundClient
 from dynamic_reconfigure.server import Server
 
 from partybot.cfg import PartybotConfig
@@ -75,7 +76,15 @@ class Partybot:
         self.cmd_pub = rospy.Publisher("cmd_vel", Twist)
 
         sound_dir = rospy.get_param("sound_dir", '/home/turtlebot/groovy/rosbuild/raspberry/partybot/vivian')
-        sounds = [ os.path.join(sound_dir, d) for d in os.listdir(sound_dir) ]
+        sounds = [
+        "A01_wouldyoulikecoke.wav", "B08_havecokeandsmile.wav",
+        "D08_pleasetakeacoke.wav", "D09_justgrabacoke.wav",
+        "D10_takeacoketheyrefree.wav", "D13_goaheadgrabacoke.wav",
+        "D14_goaheadtakeone.wav", "D16_takeacokenow.wav",
+        "D17_takecokenow.wav"
+        ]
+        #sounds = os.listdir(sound_dir)
+        sounds = [ os.path.join(sound_dir, d) for d in sounds ]
         self.sounds = rospy.get_param("sounds", sounds)
         rospy.set_param("sounds", sounds)
 
@@ -84,9 +93,25 @@ class Partybot:
         self.drive_start = rospy.Time(0)
         self.last_face = rospy.Time(0)
         self.pause_start = rospy.Time(0)
+        self.sound_playing = False
 
         self.roi_cmd = Twist()
+
+    class Sound(threading.Thread):
+        def __init__(self, parent, path):
+            threading.Thread.__init__(self)
+            self.path = path
+            self.parent = parent
+
+        def run(self):
+            self.parent.sound_playing = True
+            os.system("aplay %s"%(self.path))
+            rospy.sleep(3)
+            self.parent.sound_playing = False
     
+    def play_sound(self, path):
+        s = self.Sound(self, path)
+        s.start()
 
     def cfg_callback(self, config, level):
         self.config = config
@@ -193,17 +218,22 @@ class Partybot:
 
                 self.cmd_pub.publish(self.roi_cmd)
             elif self.state == PAUSE:
-                # TODO: play sounds and wait
+                # play sound
                 if i == 0:
                     rospy.loginfo("Pausing...")
+
+                if not self.sound_playing:
+                    self.play_sound(random.choice(self.sounds))
+
+                # wait
                 if (now - self.pause_start).to_sec() > self.config.pause_time:
                     self.state = AWAY
                     self.away_start = now
+                    self.sound_playing = False
                 self.cmd_pub.publish(Twist())
             elif self.state == AWAY:   
                 if i == 0:
                     rospy.loginfo("Away...")
-                # TODO
                 away_time = (now - self.away_start).to_sec()
                 turn_time = self.config.return_angle / self.config.search_speed
                 drive_time = self.config.return_dist / self.config.return_speed
