@@ -4,7 +4,7 @@
        <arg name="device" value="/dev/video1"/>
     </include>
 
-    <include file="$(fild rbx1_vision)/launch/face_tracker2.launch"/>
+    <include file="$(find rbx1_vision)/launch/face_tracker2.launch"/>
 
     <node pkg="hercules_node" type="controller" name="controller"/>
 </launch>
