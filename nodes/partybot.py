@@ -75,7 +75,7 @@ class Partybot:
 
         self.cmd_pub = rospy.Publisher("cmd_vel", Twist)
 
-        sound_dir = rospy.get_param("sound_dir", '/home/turtlebot/groovy/rosbuild/raspberry/partybot/vivian')
+        sound_dir = rospy.get_param("~sound_dir", '/home/turtlebot/groovy/rosbuild/raspberry/partybot/vivian')
         sounds = [
         "A01_wouldyoulikecoke.wav", "B08_havecokeandsmile.wav",
         "D08_pleasetakeacoke.wav", "D09_justgrabacoke.wav",
@@ -85,8 +85,8 @@ class Partybot:
         ]
         #sounds = os.listdir(sound_dir)
         sounds = [ os.path.join(sound_dir, d) for d in sounds ]
-        self.sounds = rospy.get_param("sounds", sounds)
-        rospy.set_param("sounds", sounds)
+        self.sounds = rospy.get_param("~sounds", sounds)
+        rospy.set_param("~sounds", sounds)
 
         self.state = SEARCH
         self.search_start = rospy.Time.now()
