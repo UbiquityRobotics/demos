@@ -56,6 +56,7 @@ AWAY=3
 
 import roslib ; roslib.load_manifest('partybot')
 import rospy
+import os
 from sound_play.libsoundplay import SoundClient
 from dynamic_reconfigure.server import Server
 
@@ -73,11 +74,18 @@ class Partybot:
 
         self.cmd_pub = rospy.Publisher("cmd_vel", Twist)
 
-        self.sounds = rospy.get_param("sounds", [])
+        sound_dir = rospy.get_param("sound_dir", '/home/turtlebot/groovy/rosbuild/raspberry/partybot/vivian')
+        sounds = [ os.path.join(sound_dir, d) for d in os.listdir(sound_dir) ]
+        self.sounds = rospy.get_param("sounds", sounds)
+        rospy.set_param("sounds", sounds)
 
         self.state = SEARCH
+        self.search_start = rospy.Time.now()
         self.drive_start = rospy.Time(0)
         self.last_face = rospy.Time(0)
+        self.pause_start = rospy.Time(0)
+
+        self.roi_cmd = Twist()
     
 
     def cfg_callback(self, config, level):
@@ -109,6 +117,7 @@ class Partybot:
                 percent_offset_size = 0
 
             cmd = Twist()
+            got_person = True
 
             if abs(percent_offset_x) > self.config.image_x_thresh:
                 speed = self.config.angle_gain * percent_offset_x
@@ -120,6 +129,7 @@ class Partybot:
                         self.config.min_angular_speed, min(
                             self.config.max_angular_speed,
                             abs(speed)))
+                got_person = False
             else:
                 cmd.angular.z = 0
 
@@ -134,11 +144,15 @@ class Partybot:
                         self.config.min_linear_speed, min(
                             self.config.max_linear_speed,
                             abs(speed)))
-                #cmd.linear.x = speed
+                got_person = False
             else:
                 cmd.linear.x = 0
 
-            self.cmd_pub.publish(cmd)
+            self.roi_cmd = cmd
+            if got_person:
+                rospy.loginfo("Got Person")
+                self.state = PAUSE
+                self.pause_start = now
 
 
 
@@ -147,12 +161,28 @@ class Partybot:
             rospy.loginfo("Waiting for initial config")
             rospy.sleep(1)
 
+        r = rospy.Rate(30)
+        i = 0
+
         while not rospy.is_shutdown():
             now = rospy.Time.now()
             if self.state == SEARCH:
-                rospy.loginfo("Searching...")
+                if i == 0:
+                    rospy.loginfo("Searching...")
+                search_time = (now - self.search_start).to_sec()
+                turn_time = self.config.search_angle / self.config.search_speed
+                cmd = Twist()
+                if search_time < turn_time:
+                    cmd.angular.z = self.config.search_speed
+                elif search_time < (turn_time + self.config.search_time):
+                    pass
+                else:
+                    self.search_start = now
+                    
+                self.cmd_pub.publish(cmd)
             elif self.state == DRIVE:
-                rospy.loginfo("Driving...")
+                if i == 0:
+                    rospy.loginfo("Driving...")
                 if (now - self.last_face).to_sec() > self.config.face_timeout:
                     rospy.loginfo("Lost Face.")
                     self.state = SEARCH
@@ -160,15 +190,42 @@ class Partybot:
                     rospy.loginfo("Person Following Timed out")
                     self.state = AWAY
                     self.away_start = now
+
+                self.cmd_pub.publish(self.roi_cmd)
             elif self.state == PAUSE:
+                # TODO: play sounds and wait
+                if i == 0:
+                    rospy.loginfo("Pausing...")
+                if (now - self.pause_start).to_sec() > self.config.pause_time:
+                    self.state = AWAY
+                    self.away_start = now
+                self.cmd_pub.publish(Twist())
+            elif self.state == AWAY:   
+                if i == 0:
+                    rospy.loginfo("Away...")
                 # TODO
-                rospy.loginfo("Pausing...")
-            else:   
-                rospy.loginfo("Away...")
-                # TODO
-                if (now - self.away_start).to_sec() > 10:
+                away_time = (now - self.away_start).to_sec()
+                turn_time = self.config.return_angle / self.config.search_speed
+                drive_time = self.config.return_dist / self.config.return_speed
+                cmd = Twist()
+                if away_time < turn_time:
+                    cmd.angular.z = self.config.search_speed
+                elif away_time < (turn_time + drive_time):
+                    cmd.linear.x = self.config.return_speed
+                else:
                     self.state = SEARCH
-            rospy.sleep(1)
+                    self.search_start = now
+                
+                self.cmd_pub.publish(cmd)
+            else:
+                rospy.logerr("ERROR: bad state: %d"%(self.state))
+                self.state = SEARCH
+                self.search_start = now
+                self.cmd_pub.publish(Twist())
+            r.sleep()
+            i += 1
+            if i >= 30:
+                i = 0
     
         rospy.loginfo("Partybot Exiting")
 
