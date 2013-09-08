@@ -105,7 +105,7 @@ class Partybot:
             target_offset_x = roi.x_offset + roi.width / 2 - self.config.image_width / 2
             target_offset_y = roi.y_offset + roi.height / 2 - self.config.image_height / 2
             # size_offset > 0 -> forward
-            size_offset = self.config.target_size - roi.width
+            size_offset = self.config.target_size - (roi.width * roi.height)
 
             try:
                 percent_offset_x = float(target_offset_x) / float(self.config.image_width)
