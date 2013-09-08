@@ -1,0 +1,6 @@
+<launch>
+    <node pkg="partybot" type="partybot.py" name="partybot">
+	<rosparam file="$(find partybot)/partybot.yaml"/>
+        <param name="sound_dir" value="/home/hercules/raspberry/partybot/vivian"/>
+    </node>
+</launch>

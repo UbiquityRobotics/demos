@@ -1,0 +1,28 @@
+angle_gain: 1.0
+drive_timeout: 90.0
+face_timeout: 1.0
+image_height: 240
+image_size_thresh: 0.05
+image_width: 320
+image_x_thresh: 0.05
+max_angular_speed: 3.141592653589793
+max_linear_speed: 1.0
+min_angular_speed: 0.05
+min_linear_speed: 0.1
+pause_time: 10.0
+return_angle: 2.0943951023931953
+return_dist: 2.0
+return_speed: 0.5
+search_angle: 1.0471975511965976
+search_speed: 1.0
+search_time: 5.0
+sound_dir: /home/hercules/raspberry/partybot/vivian/
+sounds: [/home/hercules/raspberry/partybot/vivian/A01_wouldyoulikecoke.wav, /home/hercules/raspberry/partybot/vivian/B08_havecokeandsmile.wav,
+  /home/hercules/raspberry/partybot/vivian/D08_pleasetakeacoke.wav, /home/hercules/raspberry/partybot/vivian/D09_justgrabacoke.wav,
+  /home/hercules/raspberry/partybot/vivian/D10_takeacoketheyrefree.wav, /home/hercules/raspberry/partybot/vivian/D13_goaheadgrabacoke.wav,
+  /home/hercules/raspberry/partybot/vivian/D14_goaheadtakeone.wav, /home/hercules/raspberry/partybot/vivian/D16_takeacokenow.wav,
+  /home/hercules/raspberry/partybot/vivian/D17_takecokenow.wav]
+sounds_dir: /home/hercules/raspberry/partybot/vivian/
+target_gain: 0.5
+target_size: 5000.0
+
