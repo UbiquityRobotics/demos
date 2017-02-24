@@ -1,0 +1,21 @@
+aruco_detect:
+  adaptiveThreshConstant: 7.0
+  adaptiveThreshWinSizeMax: 25
+  adaptiveThreshWinSizeMin: 15
+  adaptiveThreshWinSizeStep: 4
+  cornerRefinementMaxIterations: 30
+  cornerRefinementMinAccuracy: 0.01
+  cornerRefinementWinSize: 5
+  doCornerRefinement: true
+  errorCorrectionRate: 0.6
+  markerBorderBits: 1
+  maxErroneousBitsInBorderRate: 0.04
+  maxMarkerPerimeterRate: 1.0
+  minCornerDistanceRate: 0.05
+  minDistanceToBorder: 3
+  minMarkerDistanceRate: 0.1
+  minMarkerPerimeterRate: 0.03
+  minOtsuStdDev: 5.0
+  perspectiveRemoveIgnoredMarginPerCell: 0.13
+  perspectiveRemovePixelPerCell: 8
+  polygonalApproxAccuracyRate: 0.01
