@@ -65,6 +65,7 @@ class Follow:
        self.lr = tf2_ros.TransformListener(self.tfBuffer)
        self.br = tf2_ros.TransformBroadcaster()
        self.cmdPub = rospy.Publisher("/cmd_vel", Twist, queue_size=1)
+       self.target_fiducial = rospy.get_param("target_fiducial", "fid49")
        rospy.Subscriber("/fiducial_transforms", FiducialTransformArray, self.newTf)
        self.fid_x = 0.6
        self.fid_y = 0
@@ -99,7 +100,7 @@ class Follow:
 
             rospy.sleep(0.01) # hack
             try:
-                tf = self.tfBuffer.lookup_transform("base_link", "fid102", imageTime)
+                tf = self.tfBuffer.lookup_transform("base_link", self.target_fiducial, imageTime)
                 ct = tf.transform.translation
                 cr = tf.transform.rotation
                 print "T_fidBase %lf %lf %lf %lf %lf %lf %lf\n" % \
