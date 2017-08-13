@@ -9,4 +9,4 @@ the fiducial.
 
 ## Paramaters
 
-`target_fiducial` the fiducial we are following. Default `fid49`
+`target_fiducial` the fiducial we are following. Default `fid_49`.
