@@ -36,7 +36,7 @@ import rospy
 from geometry_msgs.msg import PoseWithCovarianceStamped, Pose, Point, Quaternion, \
                               TransformStamped, Twist
 
-from fiducial_pose.msg import Fiducial, FiducialTransform, FiducialTransformArray
+from fiducial_msgs.msg import Fiducial, FiducialTransform, FiducialTransformArray
 
 from tf.transformations import euler_from_quaternion, quaternion_slerp, \
                                translation_matrix, quaternion_matrix, \
