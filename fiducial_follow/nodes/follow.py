@@ -65,7 +65,7 @@ class Follow:
        self.lr = tf2_ros.TransformListener(self.tfBuffer)
        self.br = tf2_ros.TransformBroadcaster()
        self.cmdPub = rospy.Publisher("/cmd_vel", Twist, queue_size=1)
-       self.target_fiducial = rospy.get_param("target_fiducial", "fid49")
+       self.target_fiducial = rospy.get_param("~target_fiducial", "fid49")
        rospy.Subscriber("/fiducial_transforms", FiducialTransformArray, self.newTf)
        self.fid_x = 0.6
        self.fid_y = 0
@@ -78,6 +78,9 @@ class Follow:
         imageTime = msg.header.stamp
         self.linSpeed = 0
 
+        print imageTime, rospy.Time.now()
+        print "*****"
+
         for m in msg.transforms:
             id = m.fiducial_id
             trans = m.transform.translation
@@ -87,7 +90,7 @@ class Follow:
                                   rot.x, rot.y, rot.z, rot.w)
             t = TransformStamped()
             t.child_frame_id = "fid%d" % id
-            t.header.frame_id = "raspicam"
+            t.header.frame_id = msg.header.frame_id
             t.header.stamp = imageTime
             t.transform.translation.x = trans.x
             t.transform.translation.y = trans.y
@@ -96,21 +99,24 @@ class Follow:
             t.transform.rotation.y = rot.y
             t.transform.rotation.z = rot.z
             t.transform.rotation.w = rot.w
-            self.br.sendTransform(t)
+            #self.br.sendTransform(t)
 
-            rospy.sleep(0.01) # hack
-            try:
-                tf = self.tfBuffer.lookup_transform("base_link", self.target_fiducial, imageTime)
-                ct = tf.transform.translation
-                cr = tf.transform.rotation
-                print "T_fidBase %lf %lf %lf %lf %lf %lf %lf\n" % \
-                                 (ct.x, ct.y, ct.z, cr.x, cr.y, cr.z, cr.w)
-                self.fid_x = ct.x
-                self.fid_y = ct.y
-                self.got_fid = True 
-            except:
-                #traceback.print_exc()
-                print "Could not get tf from fid%d" % id
+            #rospy.sleep(0.01) # hack
+            self.tfBuffer.set_transform(t, "follow")
+
+        try:
+            tf = self.tfBuffer.lookup_transform("base_link", self.target_fiducial, imageTime)
+            ct = tf.transform.translation
+            cr = tf.transform.rotation
+            print "T_fidBase %lf %lf %lf %lf %lf %lf %lf\n" % \
+                             (ct.x, ct.y, ct.z, cr.x, cr.y, cr.z, cr.w)
+            self.fid_x = ct.x
+            self.fid_y = ct.y
+            self.got_fid = True
+        except:
+            #traceback.print_exc()
+            print "Could not get tf for %s" % self.target_fiducial
+
 
     def run(self):
         rate = rospy.Rate(10) # 10hz
