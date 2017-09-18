@@ -99,7 +99,7 @@ class Follow:
             t.transform.rotation.y = rot.y
             t.transform.rotation.z = rot.z
             t.transform.rotation.w = rot.w
-            #self.br.sendTransform(t)
+            self.br.sendTransform(t)
 
             #rospy.sleep(0.01) # hack
             self.tfBuffer.set_transform(t, "follow")
@@ -134,7 +134,7 @@ class Follow:
             if (self.got_fid):
                 times_since_last_fid = 0
 
-            if (forward_error > 2.0):
+            if (forward_error > 2.5):
                 print "Fiducial is too far away"
                 linSpeed = 0 
                 theta = 0
@@ -142,7 +142,7 @@ class Follow:
                 twist.angular.z = theta
                 twist.linear.x = linSpeed 
                 self.cmdPub.publish(twist)
-            elif (self.got_fid == False and times_since_last_fid < 2):
+            elif (self.got_fid == False and times_since_last_fid < 4):
                 times_since_last_fid += 1
                 twist = Twist()
                 twist.angular.z = theta
