@@ -26,7 +26,11 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """
 
 """
+Simultaneous location and mapping based on fiducial poses.
+Receives FiducialTransform messages and builds a map and estimates the
+camera pose from them
 """
+
 
 import rospy
 from geometry_msgs.msg import PoseWithCovarianceStamped, Pose, Point, Quaternion, \
@@ -51,6 +55,18 @@ import time
 import threading
 import copy
 
+#TODO: make params
+MAX_DIST=2.5
+ANGULAR_RATE=2.0
+MAX_ANGULAR_RATE=1.2
+LINEAR_RATE=1.2
+MAX_LINEAR_RATE=1.5
+HYSTERESIS_COUNT=20
+LINEAR_DECAY=0.9
+LOST_ANGULAR_RATE=0.6
+MAX_LOST_COUNT=400
+
+
 def degrees(r):
     return 180.0 * r / math.pi
 
@@ -61,11 +77,8 @@ class Follow:
        self.lr = tf2_ros.TransformListener(self.tfBuffer)
        self.br = tf2_ros.TransformBroadcaster()
        self.cmdPub = rospy.Publisher("/cmd_vel", Twist, queue_size=1)
-       rospy.Subscriber("/fiducial_transforms", FiducialTransformArray, self.newTf)
-
        self.target_fiducial = rospy.get_param("~target_fiducial", "fid49")
-       self.max_dist = rospy.get_param("~max_dist", 3.0)
-
+       rospy.Subscriber("/fiducial_transforms", FiducialTransformArray, self.newTf)
        self.fid_x = 0.6
        self.fid_y = 0
        self.got_fid = False
@@ -79,7 +92,7 @@ class Follow:
 
         print imageTime, rospy.Time.now()
         print "*****"
-        found_fid = False
+        found = False
 
         for m in msg.transforms:
             id = m.fiducial_id
@@ -101,77 +114,89 @@ class Follow:
             t.transform.rotation.w = rot.w
             self.br.sendTransform(t)
 
+            self.tfBuffer.set_transform(t, "follow")
+        
             if t.child_frame_id == self.target_fiducial:
-                found_fid = True
-                self.tfBuffer.set_transform(t, "follow")
-        if found_fid:
-            try:
-                tf = self.tfBuffer.lookup_transform("base_link", self.target_fiducial, imageTime)
-                ct = tf.transform.translation
-                cr = tf.transform.rotation
-                print "T_fidBase %lf %lf %lf %lf %lf %lf %lf\n" % \
-                                 (ct.x, ct.y, ct.z, cr.x, cr.y, cr.z, cr.w)
-                self.fid_x = ct.x
-                self.fid_y = ct.y
-                self.got_fid = True
-            except:
-                #traceback.print_exc()
-                print "Could not get tf for %s" % self.target_fiducial
-                self.got_fid = False
-        else:
-            self.got_fid = False
+                found = True
 
-    def cmd(self, linear, angular):
-        twist = Twist()
-        twist.angular.z = angular
-        twist.linear.x = linear 
-        self.cmdPub.publish(twist)
+        if not found:
+            #self.got_fid = False
+            return
+        try:
+            tf = self.tfBuffer.lookup_transform("base_link", self.target_fiducial, imageTime)
+            ct = tf.transform.translation
+            cr = tf.transform.rotation
+            print "T_fidBase %lf %lf %lf %lf %lf %lf %lf\n" % \
+                             (ct.x, ct.y, ct.z, cr.x, cr.y, cr.z, cr.w)
+            self.fid_x = ct.x
+            self.fid_y = ct.y
+            self.got_fid = True
+        except:
+            #traceback.print_exc()
+            print "Could not get tf for %s" % self.target_fiducial
+            #self.got_fid = False
+
 
     def run(self):
-        rate = rospy.Rate(20) # 20hz
+        rate = rospy.Rate(20)
         linSpeed = 0.0
         theta = 0.0
         times_since_last_fid = 0
+
         while not rospy.is_shutdown():
             forward_error = self.fid_x - 0.6
             lateral_error = self.fid_y
             angular_error = math.atan2(self.fid_y, self.fid_x)
-            print "Forward error", forward_error
-            print "Lateral error", lateral_error
-            print "Angular error", degrees(angular_error)
+            print "Errors: forward %f lateral %f angular %f" % \
+              (forward_error, lateral_error, degrees(angular_error))
 
-            if (self.got_fid):
+            if self.got_fid:
                 times_since_last_fid = 0
             else:
                 times_since_last_fid += 1
 
-            print "got fid %d times since %d" % (self.got_fid, times_since_last_fid)
-
-            if (forward_error > self.max_dist):
+            if forward_error > MAX_DIST:
                 print "Fiducial is too far away"
-                linSpeed = 0
-                theta = 0
-            elif (self.got_fid == False and times_since_last_fid > 10 and times_since_last_fid < 300):
-                print "Try keep rotating to refind fiducial: try# %d" % times_since_last_fid
-                linSpeed = 0
-            elif (self.got_fid == False and times_since_last_fid >= 300):
-                linSpeed = 0
-                theta = 0
-                print "Give up try# %d" % times_since_last_fid
-                times_since_last_fid += 1
-            elif (abs(forward_error) > 0.1 or abs(lateral_error) > 0.1): 
-                linSpeed = min(forward_error, 1.2)
-                theta = angular_error
-            elif (self.got_fid):
                 linSpeed = 0 
                 theta = 0
-                print "We have fiducial so stop"
-            else:
+            # A fiducial was detected since last iteration of this loop
+            elif self.got_fid:
+                theta = angular_error * ANGULAR_RATE - theta / 2.0 
+                if theta < -MAX_ANGULAR_RATE:
+                    theta = -MAX_ANGULAR_RATE
+                if theta > MAX_ANGULAR_RATE:
+                    theta = MAX_ANGULAR_RATE
+                linSpeed = forward_error * LINEAR_RATE
+                if linSpeed < -MAX_LINEAR_RATE:
+                    linSpeed = -MAX_LINEAR_RATE
+                if linSpeed > MAX_LINEAR_RATE:
+                    linSpeed = MAX_LINEAR_RATE
+            # Hysteresis
+            elif not self.got_fid and times_since_last_fid < HYSTERESIS_COUNT:
+                linSpeed *= LINEAR_DECAY
+            # Try to refind fiducial by rotating
+            elif self.got_fid == False and times_since_last_fid < MAX_LOST_COUNT:
                 linSpeed = 0
+                if theta < 0:
+                    theta = -LOST_ANGULAR_RATE
+                elif theta > 0:
+                    theta = LOST_ANGULAR_RATE
+                else:
+                    theta = 0
+                print "Try keep rotating to refind fiducial: try# %d" % times_since_last_fid
+            else:
                 theta = 0
+                linSpeed = 0
+                
+            print "Speeds: linear %f angular %f" % (linSpeed, theta)
+            twist = Twist()
+            twist.angular.z = theta
+            twist.linear.x = linSpeed 
+            self.cmdPub.publish(twist)
+
             self.got_fid = False
-            self.cmd(linSpeed, theta)
             rate.sleep()
+
 
 if __name__ == "__main__":
     node = Follow()
