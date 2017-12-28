@@ -168,7 +168,7 @@ class Follow:
 
         # Setup the variables that we will use later
         linSpeed = 0.0
-        theta = 0.0
+        angSpeed = 0.0
         times_since_last_fid = 0
 
         # While our node is running
@@ -192,16 +192,17 @@ class Follow:
             if forward_error > self.max_dist:
                 print "Fiducial is too far away"
                 linSpeed = 0
-                theta = 0
+                angSpeed = 0
             # A fiducial was detected since last iteration of this loop
             elif self.got_fid:
-                # ???
-                theta = angular_error * self.angular_rate - theta / 2.0
+                # Set the turning speed based on the angular error
+                # Add some damping based on the previous speed to smooth the motion 
+                angSpeed = angular_error * self.angular_rate - angSpeed / 2.0
                 # Make sure that the angular speed is within limits
-                if theta < -self.max_angular_rate:
-                    theta = -self.max_angular_rate
-                if theta > self.max_angular_rate:
-                    theta = self.max_angular_rate
+                if angSpeed < -self.max_angular_rate:
+                    angSpeed = -self.max_angular_rate
+                if angSpeed > self.max_angular_rate:
+                    angSpeed = self.max_angular_rate
 
                 # Set the forward speed based distance
                 linSpeed = forward_error * self.linear_rate
@@ -221,22 +222,22 @@ class Follow:
                 # Stop moving forward
                 linSpeed = 0
                 # Keep turning in the same direction
-                if theta < 0:
-                    theta = -self.lost_angular_rate
-                elif theta > 0:
-                    theta = self.lost_angular_rate
+                if angSpeed < 0:
+                    angSpeed = -self.lost_angular_rate
+                elif angSpeed > 0:
+                    angSpeed = self.lost_angular_rate
                 else:
-                    theta = 0
+                    angSpeed = 0
                 print "Try keep rotating to refind fiducial: try# %d" % times_since_last_fid
             else:
-                theta = 0
+                angSpeed = 0
                 linSpeed = 0
 
-            print "Speeds: linear %f angular %f" % (linSpeed, theta)
+            print "Speeds: linear %f angular %f" % (linSpeed, angSpeed)
 
             # Create a Twist message from the velocities and publish it
             twist = Twist()
-            twist.angular.z = theta
+            twist.angular.z = angSpeed
             twist.linear.x = linSpeed
             self.cmdPub.publish(twist)
 
