@@ -131,7 +131,7 @@ class Follow:
             self.br.sendTransform(t)
 
             if t.child_frame_id == self.target_fiducial:
-	        self.tfBuffer.set_transform(t, "follow")
+		self.tfBuffer.set_transform(t, "follow")
                 found = True
 
         if not found:
