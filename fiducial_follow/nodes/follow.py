@@ -221,7 +221,6 @@ class Follow:
                 # Stop moving forward
                 linSpeed = 0
                 # Keep turning in the same direction
-                # (rohbotics: Why do we need the if statements, can't we just not touch it?)
                 if theta < 0:
                     theta = -self.lost_angular_rate
                 elif theta > 0:
