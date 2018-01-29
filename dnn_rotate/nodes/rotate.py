@@ -42,6 +42,7 @@ import rospy
 import dnn_rotate.srv
 import dnn_detect.srv
 import actionlib
+from actionlib_msgs.msg import *
 import move_base_msgs.msg
 import tf.transformations
 import math
@@ -95,6 +96,9 @@ class Rotate:
         target = rotate_req.object.data
         print("Received service call: rotate %s" % target)
 
+        # Create a response to our service
+        response = dnn_rotate.srv.StringResponse()
+
         # Make a detection trigger service call
         detect_req = dnn_detect.srv.DetectRequest()
         detect_resp = self.trigger(detect_req)
@@ -111,7 +115,6 @@ class Rotate:
 
         # Create a negative response to our rotate service call
         if best_target is None: 
-            response = dnn_rotate.srv.StringResponse()
             response.response.data = "No %s object found" % target
             return response
 
@@ -129,12 +132,12 @@ class Rotate:
         goal.target_pose.header.frame_id = "base_link"
         goal.target_pose.pose.orientation = Quaternion(*q)
         self.move.send_goal(goal)
-        self.move.wait_for_result()
-        # We could do some error handling here
+        self.move.wait_for_result(rospy.Duration(60.0))
 
-        # Create a response to our service
-        response = dnn_rotate.srv.StringResponse()
-        response.response.data = "Rotating to %s" % target
+        if self.move.get_state() == GoalStatus.SUCCEEDED:
+            response.response.data = "Rotated to %s" % target
+        else:
+            response.response.data = "Error rotating to %s" % target
         return response
 
     # Just sleep while the node is running
