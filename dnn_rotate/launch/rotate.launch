@@ -28,6 +28,5 @@
   </node>
 
   <!-- dnn_rotate -->
-  <node name="dnn_rotate" pkg="dnn_rotate" type="rotate.py" output="screen">
-  </include>
+  <node name="dnn_rotate" pkg="dnn_rotate" type="rotate.py" output="screen"/>
 </launch>
