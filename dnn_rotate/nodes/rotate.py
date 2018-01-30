@@ -31,7 +31,7 @@ Rotate towards an object detected with dnn_detect.
 It provides a service /rotate, which can be called from the command line:
 
 $ rosservice call /rotate "object:
-  data: 'bottle'" 
+  data: 'bottle'"
 
 As well as providing a service, it is a client to two others: one to trigger
 the dnn_detect node to detect objects, and another to move the robot.
@@ -47,7 +47,7 @@ import move_base_msgs.msg
 import tf.transformations
 import math
 import traceback
-from geometry_msgs.msg import Quaternion
+from geometry_msgs.msg import Quaternion, Point
 
 # Utility function to convert radians to degrees
 def degrees(r):
@@ -66,12 +66,21 @@ class Rotate:
         # These paramaters allow us to caluclate the angle per pixel in the image
         # It could alternatively be done with camera_info topic
         self.image_width = rospy.get_param("~image_width", 410)
-        self.field_of_view = rospy.get_param("~field_of_view", 0.925)
+        self.field_of_view = rospy.get_param("~field_of_view", 1.05)
+
+        # How many times to rotate during search
+	self.rotation_limit = rospy.get_param("~rotation_limit", 8)
+
+        # How much to rotate during search (radians)
+        self.angle_increment = rospy.get_param("~angle_increment", 0.7)
+
+        # How far to go towards target (meters)
+        self.forward_dist = rospy.get_param("~forward_dist", 0.2)
 
         # Setup the rotate service we serve
         self.srv = rospy.Service("rotate", dnn_rotate.srv.String,
                                  self.service_callback)
-        
+ 
         # Create a proxy object for the move action server
         self.move = actionlib.SimpleActionClient('move_base',
                                                  move_base_msgs.msg.MoveBaseAction)
@@ -89,33 +98,51 @@ class Rotate:
             rospy.loginfo("Rotate node ready")
             self.ok = True
         except:
-            rospy.logerr("detect service is not available") 
+            rospy.logerr("detect service is not available")
 
     # This is called when we receive a rotate service call
     def service_callback(self, rotate_req):
         target = rotate_req.object.data
         print("Received service call: rotate %s" % target)
 
-        # Create a response to our service
+        # Create a response to our service which we return later
         response = dnn_rotate.srv.StringResponse()
 
-        # Make a detection trigger service call
-        detect_req = dnn_detect.srv.DetectRequest()
-        detect_resp = self.trigger(detect_req)
+        found_target = False
+        num_rotations = 0
 
-        # Look for matching objects
-        best_target = None
-        best_confidence = 0.0
-        for object in detect_resp.result.objects:
-            if object.class_name == target:
-                found_target = True
-                if object.confidence > best_confidence:
-                    best_target = object
-                    best_confidence = object.confidence
+        # Rotate until we find the target
+        while not found_target and num_rotations < self.rotation_limit:
+            # Make a detection trigger service call
+            detect_req = dnn_detect.srv.DetectRequest()
+            detect_resp = self.trigger(detect_req)
+ 
+            # Look for matching objects
+            best_target = None
+            best_confidence = 0.0
+            for object in detect_resp.result.objects:
+                print object
+                if object.class_name == target:
+                    found_target = True
+                    if object.confidence > best_confidence:
+                        best_target = object
+                        best_confidence = object.confidence
+
+            if not found_target:
+                rospy.loginfo("Rotating to search for %s" % target)
+                q = tf.transformations.quaternion_from_euler(0, 0,
+                        self.angle_increment)
+                if self.goto_goal(Quaternion(*q)):
+                    num_rotations += 1
+                else:
+                    response.response.data = "Error rotating"
+                    return response
+            else:
+                rospy.loginfo("Not rotating because found object")
 
         # Create a negative response to our rotate service call
         if best_target is None: 
-            response.response.data = "No %s object found" % target
+            response.response.data = "No %s object found after rotating" % target
             return response
 
         # Calculate how far we need to rotate
@@ -124,21 +151,30 @@ class Rotate:
         angle_to_rotate = (self.image_width/2.0 - x_center) * angle_per_pixel
         rospy.loginfo("Center of target %f, rotation required %f degrees" % \
                       (x_center, degrees(angle_to_rotate)))
+
         # The angle needs to be in quaternion form (a 3D angle)
+        # XXX need to transform
         q = tf.transformations.quaternion_from_euler(0, 0, angle_to_rotate)
-
-        # Create goal and actionlib call to rotate
-        goal = move_base_msgs.msg.MoveBaseGoal()
-        goal.target_pose.header.frame_id = "base_link"
-        goal.target_pose.pose.orientation = Quaternion(*q)
-        self.move.send_goal(goal)
-        self.move.wait_for_result(rospy.Duration(60.0))
-
-        if self.move.get_state() == GoalStatus.SUCCEEDED:
+        if self.goto_goal(Quaternion(*q)):
+            # go forward
+            self.goto_goal(Quaternion(0, 0, 0, 1),
+                           Point(self.forward_dist,  0, 0))
             response.response.data = "Rotated to %s" % target
         else:
             response.response.data = "Error rotating to %s" % target
         return response
+
+    # Go to a goal
+    def goto_goal(self, orientation, position=Point()):
+        # Create goal and actionlib call to rotate
+        goal = move_base_msgs.msg.MoveBaseGoal()
+        goal.target_pose.header.frame_id = "base_link"
+        goal.target_pose.pose.orientation = orientation
+        goal.target_pose.pose.position = position
+        self.move.send_goal(goal)
+        self.move.wait_for_result(rospy.Duration(60.0))
+
+        return self.move.get_state() == GoalStatus.SUCCEEDED
 
     # Just sleep while the node is running
     def run(self):
