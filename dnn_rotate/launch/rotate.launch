@@ -17,6 +17,7 @@
   </node>
 
   <!-- dnn_rotate -->
-  <node name="dnn_rotate" pkg="dnn_rotate" type="rotate.py" output="screen">
-  </node>
+  <include file="$(find dnn_detect)/launch/dnn_detect.launch">
+     <arg name="camera" value="raspicam_node"/>
+  </include>
 </launch>
