@@ -30,8 +30,7 @@ Rotate towards an object detected with dnn_detect.
 
 It provides a service /rotate, which can be called from the command line:
 
-$ rosservice call /rotate "object:
-  data: 'bottle'"
+$ rosservice call /rotate "object: 'bottle'"
 
 As well as providing a service, it is a client to two others: one to trigger
 the dnn_detect node to detect objects, and another to move the robot.
@@ -78,7 +77,7 @@ class Rotate:
         self.forward_dist = rospy.get_param("~forward_dist", 0.2)
 
         # Setup the rotate service we serve
-        self.srv = rospy.Service("rotate", dnn_rotate.srv.String,
+        self.srv = rospy.Service("rotate", dnn_rotate.srv.StringTrigger,
                                  self.service_callback)
  
         # Create a proxy object for the move action server
@@ -102,11 +101,11 @@ class Rotate:
 
     # This is called when we receive a rotate service call
     def service_callback(self, rotate_req):
-        target = rotate_req.object.data
+        target = rotate_req.object
         print("Received service call: rotate %s" % target)
 
         # Create a response to our service which we return later
-        response = dnn_rotate.srv.StringResponse()
+        response = dnn_rotate.srv.StringTriggerResponse()
 
         found_target = False
         num_rotations = 0
@@ -135,14 +134,14 @@ class Rotate:
                 if self.goto_goal(Quaternion(*q)):
                     num_rotations += 1
                 else:
-                    response.response.data = "Error rotating"
+                    response.response = "Error rotating"
                     return response
             else:
                 rospy.loginfo("Not rotating because found object")
 
         # Create a negative response to our rotate service call
         if best_target is None: 
-            response.response.data = "No %s object found after rotating" % target
+            response.response = "No %s object found after rotating" % target
             return response
 
         # Calculate how far we need to rotate
@@ -159,9 +158,9 @@ class Rotate:
             # go forward
             self.goto_goal(Quaternion(0, 0, 0, 1),
                            Point(self.forward_dist,  0, 0))
-            response.response.data = "Rotated to %s" % target
+            response.response = "Rotated to %s" % target
         else:
-            response.response.data = "Error rotating to %s" % target
+            response.response = "Error rotating to %s" % target
         return response
 
     # Go to a goal

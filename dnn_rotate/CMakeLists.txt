@@ -17,7 +17,7 @@ find_package(catkin REQUIRED COMPONENTS rospy move_base_msgs
 ## Generate services in the 'srv' folder
 add_service_files(
   FILES
-  String.srv
+  StringTrigger.srv
 )
 
 ## Generate added messages and services with any dependencies listed here
