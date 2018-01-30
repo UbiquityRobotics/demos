@@ -12,7 +12,7 @@
   <buildtool_depend>catkin</buildtool_depend>
   <run_depend>dnn_detect</run_depend>
 
-  <url type="website">https://github.com/UbiquityRobotics/demos"</url>
+  <url type="website">https://github.com/UbiquityRobotics/demos</url>
 
   <export>
   </export>
