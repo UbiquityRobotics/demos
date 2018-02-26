@@ -25,9 +25,9 @@ to detect objects in the image feed from a camera.
 
 `~field_of_view`: Horizontal field of view in radians. Default `1.05`.
 
-`~rotation_limit`: How many times to rotate to find the object, before giving up. Default `8`.
+`~angle_increment`: Angle to rotate in radians if object is not found. Default `0.7`.
 
-`~angle_increment`: Angle to rotate in radians. Default `0.7`.
+`~rotation_limit`: How many times to rotate `angle_increment` radians if the object is not found, before giving up. Default `8`.
 
 `~forward_dist`: How far to move forward in meters when object is found. Default `0.2`.
 `
