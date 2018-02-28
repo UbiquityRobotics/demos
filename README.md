@@ -3,7 +3,8 @@
 
 This repository contains the following demos:
 
-* [Partybot](partybot) (work in progress)
-* [Fiducial Follow](fiducial_follow) 
 * [dnn_rotate](dnn_ratate) 
+* [Fiducial Follow](fiducial_follow) 
+* [move_demo](move_demo) 
+* [Partybot](partybot) (work in progress)
 
