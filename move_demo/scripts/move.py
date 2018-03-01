@@ -46,25 +46,28 @@ def degrees(r):
 def radians(r):
     return math.pi * r / 180.0
 
-# Class to encapsulate our node
+# Utility function to return an identiy quaternion representing zero rotation
+def identity_quaternion():
+    return Quaternion(0,0,0,1)
+
 class Move:
     """
     Constructor for our class
     """
     def __init__(self):
-        self.ok = False
-        rospy.init_node("rotate")
- 
         # Create a proxy object for the move action server
         self.move = actionlib.SimpleActionClient('/move_base',
                                                  move_base_msgs.msg.MoveBaseAction)
         rospy.loginfo("Waiting for move service to be available")
         if not self.move.wait_for_server(rospy.Duration(10.0)):
            rospy.logerr("Move service not available")
-           sys.exit(2)
+           self.move = None
+           return
 
     # Go to a goal
-    def goto_goal(self, orientation, position=Point()):
+    def goto_goal(self, orientation=identity_quaternion(), position=Point()):
+        if self.move is None:
+            rospy.logerr("Move service not available")
         # Create goal and actionlib call to rotate
         goal = move_base_msgs.msg.MoveBaseGoal()
         goal.target_pose.header.frame_id = "base_link"
@@ -74,21 +77,24 @@ class Move:
         self.move.wait_for_result(rospy.Duration(60.0))
 
         if self.move.get_state() == GoalStatus.SUCCEEDED:
-           print "Success"
+           rospy.loginfo("Success")
+           return True
         else:
-           print "Failure"
+           rospy.loginfo("Failure")
+           return False
 
     def rotate(self, angle):
         rospy.loginfo("Rotating %f degrees" % angle)
         q = tf.transformations.quaternion_from_euler(0, 0, radians(angle))
-        self.goto_goal(Quaternion(*q))
+        self.goto_goal(orientation=Quaternion(*q))
 
     def forward(self, dist):
         rospy.loginfo("Moving %f meters" % dist)
-        self.goto_goal(Quaternion(0, 0, 0, 1), Point(dist, 0, 0))
+        self.goto_goal(position=Point(dist, 0, 0))
 
 def usage():
-    print """Usage: %s rotate|forward amount
+    print \
+"""Usage: %s rotate|forward amount
   rotate <angle in degrees>
   forward <distance in meters>
 """ % sys.argv[0]
@@ -96,6 +102,7 @@ def usage():
 
 
 if __name__ == "__main__":
+    rospy.init_node("rotate")
     if len(sys.argv) != 3:
         usage()
     
