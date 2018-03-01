@@ -74,6 +74,7 @@ class Move:
     def goto_goal(self, orientation=identity_quaternion(), position=Point()):
         if self.move is None:
             rospy.logerr("Move service not available")
+            return False
         # Transform goal into the odom fram
         # Create goal and actionlib call to rotate
         pose_base = PoseStamped()
