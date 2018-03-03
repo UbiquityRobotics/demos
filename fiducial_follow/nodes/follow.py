@@ -61,6 +61,9 @@ class Follow:
        # A publisher for robot motion commands
        self.cmdPub = rospy.Publisher("/cmd_vel", Twist, queue_size=1)
 
+       # Flag to avoid sending repeated zero speeds
+       self.suppressCmd = False
+
        # The name of the coordinate frame of the fiducial we are interested in
        self.target_fiducial = rospy.get_param("~target_fiducial", "fid49")
 
@@ -156,6 +159,7 @@ class Follow:
             self.fid_y = ct.y
             self.got_fid = True
         except:
+            traceback.print_exc()
             print "Could not get tf for %s" % self.target_fiducial
 
 
@@ -236,10 +240,19 @@ class Follow:
             print "Speeds: linear %f angular %f" % (linSpeed, angSpeed)
 
             # Create a Twist message from the velocities and publish it
-            twist = Twist()
-            twist.angular.z = angSpeed
-            twist.linear.x = linSpeed
-            self.cmdPub.publish(twist)
+            # Avoid sending repeated zero speed commands, so teleop
+            # can work
+            zeroSpeed = (angSpeed == 0 and linSpeed == 0)
+            if not zeroSpeed:
+                self.suppressCmd = False
+            print "zero", zeroSpeed, self.suppressCmd
+            if not self.suppressCmd:
+                twist = Twist()
+                twist.angular.z = angSpeed
+                twist.linear.x = linSpeed
+                self.cmdPub.publish(twist)
+                if zeroSpeed:
+                    self.suppressCmd = True
 
             # We already acted on the current fiducial
             self.got_fid = False
