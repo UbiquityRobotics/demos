@@ -2,7 +2,7 @@
 
 # Nodes
 
-## dnn_rotate.py
+## rotate.py
 
 The dnn_rotate demo uses [dnn_detect](http://wiki.ros.org/dnn_detect)
 to detect objects in the image feed from a camera.
