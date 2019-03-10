@@ -70,16 +70,11 @@ class Dock:
         self.tf_buffer = tf2_ros.Buffer()
         self.listener = tf2_ros.TransformListener(self.tf_buffer)
 
-        # These paramaters allow us to caluclate the angle per pixel in the image
-        # It could alternatively be done with camera_info topic
-        self.image_width = rospy.get_param("~image_width", 410)
-        self.field_of_view = rospy.get_param("~field_of_view", 1.05)
-
         # How many times to rotate during search
 	self.rotation_limit = rospy.get_param("~rotation_limit", 8)
 
-        # How much to rotate during search (radians)
-        self.angle_increment = rospy.get_param("~angle_increment", 0.7)
+        # How much to rotate during search (degrees)
+        self.angle_increment = radians(rospy.get_param("~angle_increment", 40))
  
         # Waypoints
         self.waypoints = []

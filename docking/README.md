@@ -11,7 +11,7 @@ to detect fiducials markers in an image feed from a camera. When the sevice
 
 ### Services Provided
 
-`/dock` (`std_srvs/Empty`): invokes the docking service
+`/dock` (`std_srvs/Trigger`): invokes the docking service
 
 
 ### Publications
@@ -20,11 +20,19 @@ to detect fiducials markers in an image feed from a camera. When the sevice
 
 ### Parameters
 
-`path` a string containg a list of poses in the form (x, y, theta), where
+`~waypoints` a string containg a list of poses in the form `x0 y0 theta, x1 y1 theta1`, where
  x and y are distances in meters and theta is an angle in degrees, relative
  to the map frame.
 
+`~angle_increment`: Angle to rotate in degrees if object is not found. Default `40`.
+
+`~rotation_limit`: How many times to rotate `angle_increment` radians if the object is not found,
+ before giving up. Default `8`.
+
+
+
 ### Example usage
 
-    rosrun docking docking.py
+    roslaunch docking docking.launch
 
+    rosservice call /dock
