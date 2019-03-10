@@ -22,7 +22,7 @@ to detect fiducials markers in an image feed from a camera. When the sevice
 
 `~waypoints` a string containg a list of poses in the form `x0 y0 theta, x1 y1 theta1`, where
  x and y are distances in meters and theta is an angle in degrees, relative
- to the map frame.
+ to the map frame. Default: "-1 0 0, 0 0 0"
 
 `~angle_increment`: Angle to rotate in degrees if object is not found. Default `40`.
 
