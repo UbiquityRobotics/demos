@@ -1,0 +1,9 @@
+<launch>
+    <include file="$(find magni_nav)/launch/aruco.launch"/>
+    <include file="$(find magni_nav)/launch/move_basic.launch"/>
+
+    <node pkg="docking" type="docking.py" name="docking">
+       <param name="waypoints" value="0 1 0, 0 0 0"/>
+    </node>
+</launch>
+
