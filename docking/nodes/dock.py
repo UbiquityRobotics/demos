@@ -78,7 +78,7 @@ class Dock:
  
         # Waypoints
         self.waypoints = []
-        waypoint_str = rospy.get_param("waypoints", "-1 0 0, 0 0 0")
+        waypoint_str = rospy.get_param("/docking/waypoints", "-1 0 0, 0 0 0")
         for wp_str in waypoint_str.split(","):
             elems = wp_str.strip(" ").split()
             self.waypoints.append(map(float, elems))
