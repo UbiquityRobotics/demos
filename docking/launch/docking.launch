@@ -1,6 +1,7 @@
 <launch>
     <include file="$(find magni_nav)/launch/aruco.launch"/>
     <include file="$(find magni_nav)/launch/move_basic.launch"/>
+    <include file="$(find magni_description)/launch/description.launch"/>
 
     <node pkg="pi_sonar" type="pi_sonar" name="pi_sonar"/>
 
