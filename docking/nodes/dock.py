@@ -49,6 +49,9 @@ import traceback
 from geometry_msgs.msg import Quaternion, Point
 import time
 
+
+EVACUTIONX = 1.5
+
 # Utility function to convert radians to degrees
 def degrees(r):
     return 180.0 * r / math.pi
@@ -137,6 +140,19 @@ class Dock:
         # Create a negative response to our rotate service call
         if not self.seen_fiducial: 
             response.message = "Not fiducial seen after rotating"
+            response.success = False
+            return response
+
+        # Go to evacuation point. This requires looking up our current position
+        try:
+            trans = tfBuffer.lookup_transform("map", 'base_footprint', rospy.Time())
+        except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
+            response.message = "Could not get current position to determine evacuation point"
+            response.success = False
+            return response
+        evacutationPoint = (EVACUATIONX, trans.transform.translation.y, 0)
+        if not self.goto_goal(Quaternion(0, 0, 0, 1), position=evacuationPoint, frame="map"):
+            response.message = "Error going to evacuation point"
             response.success = False
             return response
 
