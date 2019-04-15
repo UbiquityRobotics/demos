@@ -5,8 +5,7 @@
 
     <node pkg="pi_sonar" type="pi_sonar" name="pi_sonar"/>
 
-    <node pkg="docking" type="dock.py" name="docking">
-       <param name="waypoints" value="-1.5 -0.2 0, -1 0 0, 0 0 0"/>
+    <node pkg="docking" type="dock.py" name="docking" output="screen">
     </node>
 </launch>
 
