@@ -37,7 +37,7 @@ $ rosservice call /dock
 import rospy
 import actionlib
 from actionlib_msgs.msg import *
-from std_srvs.srv import Trigger, TriggerResponse
+import docking.srv as docking
 from geometry_msgs.msg import Quaternion, Point, PoseStamped, Pose
 from fiducial_msgs.msg import FiducialArray
 import move_base_msgs.msg
@@ -79,15 +79,8 @@ class Dock:
         # How much to rotate during search (degrees)
         self.angle_increment = radians(rospy.get_param("~angle_increment", 40))
  
-        # Waypoints
-        self.waypoints = []
-        waypoint_str = rospy.get_param("/docking/waypoints", "-1 0 0, 0 0 0")
-        for wp_str in waypoint_str.split(","):
-            elems = wp_str.strip(" ").split()
-            self.waypoints.append(map(float, elems))
-
         # Setup the service we serve
-        self.srv = rospy.Service("dock", Trigger, self.service_callback)
+        self.srv = rospy.Service("dock", docking.Dock, self.service_callback)
  
         # Subscribe to fiducial messages 
         self.fiducial_sub = rospy.Subscriber("/fiducial_vertices", 
@@ -103,23 +96,27 @@ class Dock:
            return
         rospy.loginfo("Ready")
         self.seen_fiducial = False
+        self.target_fiducial = None
 
         self.ok = True
 
 
     def fiducial_callback(self, msg):
-        if len(msg.fiducials) > 0:
-            self.seen_fiducial = True
+        for fiducial in msg.fiducials:
+            if fiducial.fiducial_id == target_fiducial:
+                self.seen_fiducial = True
 
     # This is called when we receive a rotate service call
     def service_callback(self, req):
         print("Received dock service call")
+        print("Fiducial %d, waypoints %s" % (req.fiducial_id, req.waypoints))
 
         # Create a response to our service which we return later
-        response = TriggerResponse()
+        response = docking.DockResponse()
 
         num_rotations = 0
         self.seen_fiducial = False
+        self.target_fiducial = req.fiducial_id
 
         # Rotate until we find the target
         while not self.seen_fiducial and num_rotations < self.rotation_limit:
@@ -150,11 +147,23 @@ class Dock:
             response.message = "Could not get current position to determine evacuation point"
             response.success = False
             return response
+        """
         evacutationPoint = (EVACUATIONX, trans.transform.translation.y, 0)
         if not self.goto_goal(Quaternion(0, 0, 0, 1), position=evacuationPoint, frame="map"):
             response.message = "Error going to evacuation point"
             response.success = False
             return response
+        """
+
+        # Waypoints
+        waypoints = []
+        for wp_str in req.waypoints.split(","):
+            x, y, heading = wp_str.strip(" ").split()
+            if x == "X":
+                x = trans.transform.translation.x 
+            if y == "Y":
+                y = trans.transform.translation.y 
+            self.waypoints.append((float(x), float(y), float()))
 
         # Go to each waypoint in succession
         for x, y, theta in self.waypoints:
