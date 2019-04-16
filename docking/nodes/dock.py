@@ -103,7 +103,7 @@ class Dock:
 
     def fiducial_callback(self, msg):
         for fiducial in msg.fiducials:
-            if fiducial.fiducial_id == target_fiducial:
+            if fiducial.fiducial_id == self.target_fiducial:
                 self.seen_fiducial = True
 
     # This is called when we receive a rotate service call
