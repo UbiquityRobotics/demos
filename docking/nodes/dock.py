@@ -39,9 +39,10 @@ import actionlib
 from actionlib_msgs.msg import *
 import docking.srv as docking
 from geometry_msgs.msg import Quaternion, Point, PoseStamped, Pose
-from fiducial_msgs.msg import FiducialArray
+from fiducial_msgs.msg import FiducialArray, FiducialMapEntryArray
 import move_base_msgs.msg
-import tf.transformations
+import tf
+from tf.transformations import quaternion_from_euler
 import tf2_ros
 import tf2_geometry_msgs
 import math
@@ -49,8 +50,6 @@ import traceback
 from geometry_msgs.msg import Quaternion, Point
 import time
 
-
-EVACUTIONX = 1.5
 
 # Utility function to convert radians to degrees
 def degrees(r):
@@ -78,13 +77,19 @@ class Dock:
 
         # How much to rotate during search (degrees)
         self.angle_increment = radians(rospy.get_param("~angle_increment", 40))
- 
+
         # Setup the service we serve
         self.srv = rospy.Service("dock", docking.Dock, self.service_callback)
- 
-        # Subscribe to fiducial messages 
-        self.fiducial_sub = rospy.Subscriber("/fiducial_vertices", 
+
+        # Subscribe to fiducial transform messages
+        self.target_fiducial = None
+        self.fiducial_sub = rospy.Subscriber("/fiducial_vertices",
                                              FiducialArray, self.fiducial_callback)
+
+        # Subscribe to fiducial map messages
+        self.broadcaster = tf.TransformBroadcaster()
+        self.map_sub = rospy.Subscriber("/fiducial_map",
+                                        FiducialMapEntryArray, self.map_callback)
 
         # Create a proxy object for the move action server
         self.move = actionlib.SimpleActionClient('/move_base',
@@ -96,10 +101,20 @@ class Dock:
            return
         rospy.loginfo("Ready")
         self.seen_fiducial = False
-        self.target_fiducial = None
 
         self.ok = True
 
+
+    def map_callback(self, msg):
+        # Publish a tf to create a fiducial frame, on the floor
+	# behind the fiducial with x pointing backwards
+        for fiducial in msg.fiducials:
+            if fiducial.fiducial_id == self.target_fiducial:
+               t = (fiducial.x, fiducial.y, 0.0)
+               q = quaternion_from_euler(0.0, fiducial.ry,
+                                         math.pi/2.0 + fiducial.rz)
+               self.broadcaster.sendTransform(t, q, rospy.Time.now(),
+                                              "fiducial", "map")
 
     def fiducial_callback(self, msg):
         for fiducial in msg.fiducials:
@@ -120,10 +135,10 @@ class Dock:
 
         # Rotate until we find the target
         while not self.seen_fiducial and num_rotations < self.rotation_limit:
-            time.sleep(2)
+            time.sleep(1)
             if not self.seen_fiducial:
                 rospy.loginfo("Rotating to search for fiducial")
-                q = tf.transformations.quaternion_from_euler(0, 0,
+                q = quaternion_from_euler(0, 0,
                         self.angle_increment)
                 if self.goto_goal(Quaternion(*q)):
                     num_rotations += 1
@@ -135,14 +150,15 @@ class Dock:
                 rospy.loginfo("Not rotating because fiducial seen")
 
         # Create a negative response to our rotate service call
-        if not self.seen_fiducial: 
+        if not self.seen_fiducial:
             response.message = "Not fiducial seen after rotating"
             response.success = False
             return response
 
-        # Look up our current position
+        # Look up our current position in the fiducial's frame
         try:
-            trans = self.tf_buffer.lookup_transform("map", 'base_footprint',
+            trans = self.tf_buffer.lookup_transform("fiducial",
+                                                    "base_footprint",
                                                     rospy.Time())
         except (tf2_ros.LookupException, tf2_ros.ConnectivityException,
                 tf2_ros.ExtrapolationException):
@@ -160,22 +176,23 @@ class Dock:
                 return response
             x, y, heading = elems
             if x == "X":
-                x = trans.transform.translation.x 
+                x = trans.transform.translation.x
             if y == "Y":
-                y = trans.transform.translation.y 
+                y = trans.transform.translation.y
             waypoints.append((float(x), float(y), float()))
 
         # Go to each waypoint in succession
         for x, y, theta in waypoints:
             rospy.loginfo("Going to goal %f %f %f", x, y, theta)
-            q = tf.transformations.quaternion_from_euler(0, 0, radians(theta))
+            q = quaternion_from_euler(0, 0, radians(theta))
             p = Point(x, y, 0)
-            if not self.goto_goal(Quaternion(*q), position=Point(x, y, 0), frame="map"):
-                 response.message = "Error going to goal %s %s %s" % (x, y, theta) 
+            if not self.goto_goal(Quaternion(*q), position=Point(x, y, 0),
+                                  frame="fiducial"):
+                 response.message = "Error going to goal %s %s %s" % (x, y, theta)
                  response.success = False
                  return response
 
-        response.message = "Did it"
+        response.message = "Completed"
         response.success = True
         return response
 
@@ -187,19 +204,17 @@ class Dock:
             pose_base.header.frame_id = "base_footprint"
             pose_base.pose.orientation = orientation
             pose_base.pose.position = position
-
-            try:
-                pose_odom = self.tf_buffer.transform(pose_base, "odom", rospy.Duration(1.0))
-            except:
-                rospy.logerr("Unable to transform goal into odom frame")
-                return False
-            goal.target_pose = pose_odom
         else:
-            goal.target_pose = PoseStamped()
-            goal.target_pose.pose.orientation = orientation
-            goal.target_pose.pose.position = position
-            goal.target_pose.header.frame_id = frame
-        # Create goal and actionlib call to rotate
+            pose_base = PoseStamped()
+            pose_base.pose.orientation = orientation
+            pose_base.pose.position = position
+            pose_base.header.frame_id = frame
+        try:
+            pose_odom = self.tf_buffer.transform(pose_base, "map", rospy.Duration(1.0))
+        except:
+            rospy.logerr("Unable to transform goal into map frame")
+            return False
+        goal.target_pose = pose_odom
         self.move.send_goal(goal)
         self.move.wait_for_result(rospy.Duration(50.0))
 
