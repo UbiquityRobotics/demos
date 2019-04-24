@@ -7,4 +7,5 @@ This repository contains the following demos:
 * [Fiducial Follow](fiducial_follow) 
 * [move_demo](move_demo) 
 * [Partybot](partybot) (work in progress)
+* [Docking](docking)
 
