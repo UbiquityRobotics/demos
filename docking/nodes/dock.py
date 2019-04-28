@@ -40,6 +40,7 @@ from actionlib_msgs.msg import *
 import docking.srv as docking
 from geometry_msgs.msg import Quaternion, Point, PoseStamped, Pose
 from fiducial_msgs.msg import FiducialArray, FiducialMapEntryArray
+from move_basic.msg import FollowMode
 import move_base_msgs.msg
 import tf
 from tf.transformations import quaternion_from_euler
@@ -85,11 +86,13 @@ class Dock:
         self.target_fiducial = None
         self.fiducial_sub = rospy.Subscriber("/fiducial_vertices",
                                              FiducialArray, self.fiducial_callback)
-
         # Subscribe to fiducial map messages
         self.broadcaster = tf.TransformBroadcaster()
         self.map_sub = rospy.Subscriber("/fiducial_map",
                                         FiducialMapEntryArray, self.map_callback)
+
+        # Publish follow mode messages to control the speed
+        self.follow_pub = rospy.Publisher("/follow_mode", FollowMode, queue_size=1)
 
         # Create a proxy object for the move action server
         self.move = actionlib.SimpleActionClient('/move_base',
@@ -170,20 +173,23 @@ class Dock:
         waypoints = []
         for wp_str in req.waypoints.split(","):
             elems = wp_str.strip(" ").split()
-            if not len(elems) == 3:
+            if not len(elems) == 4:
                 response.message = "Invalid waypoint %s" % elems
                 response.success = False
                 return response
-            x, y, heading = elems
+            x, y, theta, speed = elems
             if x == "X":
                 x = trans.transform.translation.x
             if y == "Y":
                 y = trans.transform.translation.y
-            waypoints.append((float(x), float(y), float()))
+            waypoints.append((float(x), float(y), float(theta), float(speed)))
 
         # Go to each waypoint in succession
-        for x, y, theta in waypoints:
+        for x, y, theta, speed in waypoints:
             rospy.loginfo("Going to goal %f %f %f", x, y, theta)
+            msg = FollowMode()
+            msg.speed = speed
+            follow_pub.publish(msg)
             q = quaternion_from_euler(0, 0, radians(theta))
             p = Point(x, y, 0)
             if not self.goto_goal(Quaternion(*q), position=Point(x, y, 0),
