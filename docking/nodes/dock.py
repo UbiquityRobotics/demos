@@ -174,7 +174,7 @@ class Dock:
         for wp_str in req.waypoints.split(","):
             elems = wp_str.strip(" ").split()
             if not len(elems) == 4:
-                response.message = "Invalid waypoint %s" % elems
+                response.message = "Invalid waypoint %s: expect x, y, theta, v" % elems
                 response.success = False
                 return response
             x, y, theta, speed = elems
