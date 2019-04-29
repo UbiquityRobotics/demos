@@ -12,12 +12,18 @@ to detect fiducials markers in an image feed from a camera. When the sevice
 ### Services Provided
 
 `/dock` (`docking/Dock`): invokes the docking service
-The robot will rotate until it either sees the target fiducial or completes one revolution. If a fiducial is seen, it will attempt to navigate to the waypoints in sequence. The format of a waypoint is three elements representing x, y, and theta. x and y are co-ordinates relative to the fiducial in meters and theta is a heading angle in degrees. The strings XandYare replaced by the currentxandy` co-ordinates, respectively.
+The robot will rotate until it either sees the target fiducial or completes one
+revolution. If a fiducial is seen, it will attempt to navigate to the waypoints
+in sequence. The format of a waypoint is four elements representing x, y, theta,
+and speed. x and y are co-ordinates relative to the fiducial in meters, theta is
+a heading angle in degrees, and speed is a speed in meters/second. The strings
+`X` and `Y` are replaced by the currentxandy` co-ordinates, respectively.
 
 
 ### Publications
 
 `/move_base/goal` (`move_base_msgs/MoveBaseActionGoal`): sends a movement goal
+`/follow_mode` (`move_basic/FollowMode`): sets follow mode (None) and speed.
 
 ### Parameters
 
@@ -32,4 +38,4 @@ The robot will rotate until it either sees the target fiducial or completes one 
 
     roslaunch docking docking.launch
 
-    rosservice call /dock "{'fiducial_id': 42, 'waypoints': '-1 Y 0, -1 0 0'}"
+    rosservice call /dock "{'fiducial_id': 42, 'waypoints': '-1 Y 0 .2, -1 0 0 .1'}"
