@@ -138,12 +138,18 @@ class Dock:
 
         # Rotate until we find the target
         while not self.seen_fiducial and num_rotations < self.rotation_limit:
-            time.sleep(1)
+            t = 0
+            while t < 3:
+                time.sleep(0.5)
+                if self.seen_fiducial:
+                   break
+                t += 3.5
             if not self.seen_fiducial:
                 rospy.loginfo("Rotating to search for fiducial")
                 q = quaternion_from_euler(0, 0,
                         self.angle_increment)
-                if self.goto_goal(Quaternion(*q)):
+                if self.goto_goal(Quaternion(*q), frame="base_footprint",
+                                  targetFrame="odom"):
                     num_rotations += 1
                 else:
                     response.message = "Error rotating"
@@ -162,10 +168,11 @@ class Dock:
         try:
             trans = self.tf_buffer.lookup_transform("fiducial",
                                                     "base_footprint",
-                                                    rospy.Time())
+                                                    rospy.Time(), rospy.Duration(5))
         except (tf2_ros.LookupException, tf2_ros.ConnectivityException,
                 tf2_ros.ExtrapolationException):
             response.message = "Could not get current position to determine evacuation point"
+            rospy.logerr(response.message)
             response.success = False
             return response
 
@@ -189,7 +196,7 @@ class Dock:
             rospy.loginfo("Going to goal %f %f %f", x, y, theta)
             msg = FollowMode()
             msg.speed = speed
-            follow_pub.publish(msg)
+            self.follow_pub.publish(msg)
             q = quaternion_from_euler(0, 0, radians(theta))
             p = Point(x, y, 0)
             if not self.goto_goal(Quaternion(*q), position=Point(x, y, 0),
@@ -203,7 +210,7 @@ class Dock:
         return response
 
     # Go to a goal
-    def goto_goal(self, orientation, position=Point(), frame=None):
+    def goto_goal(self, orientation, position=Point(), frame=None, targetFrame="map"):
         goal = move_base_msgs.msg.MoveBaseGoal()
         if frame is None:
             pose_base = PoseStamped()
@@ -216,9 +223,10 @@ class Dock:
             pose_base.pose.position = position
             pose_base.header.frame_id = frame
         try:
-            pose_odom = self.tf_buffer.transform(pose_base, "map", rospy.Duration(1.0))
+            pose_odom = self.tf_buffer.transform(pose_base, targetFrame,
+                                                 rospy.Duration(1.0))
         except:
-            rospy.logerr("Unable to transform goal into map frame")
+            rospy.logerr("Unable to transform goal into target frame")
             return False
         goal.target_pose = pose_odom
         self.move.send_goal(goal)
