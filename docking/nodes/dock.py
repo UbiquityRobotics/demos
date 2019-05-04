@@ -126,8 +126,8 @@ class Dock:
 
     # This is called when we receive a rotate service call
     def service_callback(self, req):
-        print("Received dock service call")
-        print("Fiducial %d, waypoints %s" % (req.fiducial_id, req.waypoints))
+        rospy.loginfo("Dock service call: fiducial %d, waypoints %s" % \
+                      (req.fiducial_id, req.waypoints))
 
         # Create a response to our service which we return later
         response = docking.DockResponse()
@@ -165,12 +165,8 @@ class Dock:
             return response
 
         # Look up our current position in the fiducial's frame
-        try:
-            trans = self.tf_buffer.lookup_transform("fiducial",
-                                                    "base_footprint",
-                                                    rospy.Time(), rospy.Duration(5))
-        except (tf2_ros.LookupException, tf2_ros.ConnectivityException,
-                tf2_ros.ExtrapolationException):
+        trans = self.getPose()
+        if trans is None:
             response.message = "Could not get current position to determine evacuation point"
             rospy.logerr(response.message)
             response.success = False
@@ -192,6 +188,7 @@ class Dock:
             waypoints.append((float(x), float(y), float(theta), float(speed)))
 
         # Go to each waypoint in succession
+        response.message = ""
         for x, y, theta, speed in waypoints:
             rospy.loginfo("Going to goal %f %f %f", x, y, theta)
             msg = FollowMode()
@@ -201,13 +198,32 @@ class Dock:
             p = Point(x, y, 0)
             if not self.goto_goal(Quaternion(*q), position=Point(x, y, 0),
                                   frame="fiducial"):
-                 response.message = "Error going to goal %s %s %s" % (x, y, theta)
+                 response.message += "Error going to goal %s %s %s" % (x, y, theta)
                  response.success = False
                  return response
+            else:
+                 trans = self.getPose()
+                 response.message += "Goal %f %f, actual %f %f " % \
+                   (x, y,
+                    trans.transform.translation.x, trans.transform.translation.y)
 
-        response.message = "Completed"
+        response.message += "Completed"
         response.success = True
         return response
+
+    # Look up our current position in the fiducial's frame
+    def getPose(self):
+        try:
+            trans = self.tf_buffer.lookup_transform("fiducial",
+                                                    "base_footprint",
+                                                    rospy.Time(), rospy.Duration(5))
+            rospy.loginfo("Current position relative to fiducial %f %f" % \
+                          (trans.transform.translation.x,
+                           trans.transform.translation.y))
+            return trans
+        except (tf2_ros.LookupException, tf2_ros.ConnectivityException,
+                tf2_ros.ExtrapolationException):
+            return None
 
     # Go to a goal
     def goto_goal(self, orientation, position=Point(), frame=None, targetFrame="map"):
