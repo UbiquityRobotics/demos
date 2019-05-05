@@ -203,8 +203,7 @@ class Dock:
                  return response
             else:
                  trans = self.getPose()
-                 response.message += "Goal %f %f, actual %f %f " % \
-                   (x, y,
+                 response.message += "Goal %f %f, actual %f %f; " % (x, y,
                     trans.transform.translation.x, trans.transform.translation.y)
 
         response.message += "Completed"
