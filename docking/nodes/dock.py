@@ -107,7 +107,6 @@ class Dock:
 
         self.ok = True
 
-
     def map_callback(self, msg):
         # Publish a tf to create a fiducial frame, on the floor
 	# behind the fiducial with x pointing backwards
@@ -117,12 +116,14 @@ class Dock:
                q = quaternion_from_euler(0.0, fiducial.ry,
                                          math.pi/2.0 + fiducial.rz)
                self.broadcaster.sendTransform(t, q, rospy.Time.now(),
-                                              "fiducial", "map")
+                                              "fiducial_%d" % self.target_fiducial,
+                                              "map")
 
     def fiducial_callback(self, msg):
         for fiducial in msg.fiducials:
             if fiducial.fiducial_id == self.target_fiducial:
                 self.seen_fiducial = True
+
 
     # This is called when we receive a rotate service call
     def service_callback(self, req):
@@ -133,8 +134,11 @@ class Dock:
         response = docking.DockResponse()
 
         num_rotations = 0
+        self.target_fiducial = None
         self.seen_fiducial = False
+
         self.target_fiducial = req.fiducial_id
+        self.clear_map(req.fiducial_id)
 
         # Rotate until we find the target
         while not self.seen_fiducial and num_rotations < self.rotation_limit:
@@ -197,7 +201,7 @@ class Dock:
             q = quaternion_from_euler(0, 0, radians(theta))
             p = Point(x, y, 0)
             if not self.goto_goal(Quaternion(*q), position=Point(x, y, 0),
-                                  frame="fiducial"):
+                                  frame="fiducial_%d" % self.target_fiducial):
                  response.message += "Error going to goal %s %s %s" % (x, y, theta)
                  response.success = False
                  return response
@@ -213,7 +217,7 @@ class Dock:
     # Look up our current position in the fiducial's frame
     def getPose(self):
         try:
-            trans = self.tf_buffer.lookup_transform("fiducial",
+            trans = self.tf_buffer.lookup_transform("fiducial_%d" % self.target_fiducial,
                                                     "base_footprint",
                                                     rospy.Time(), rospy.Duration(5))
             rospy.loginfo("Current position relative to fiducial %f %f" % \
