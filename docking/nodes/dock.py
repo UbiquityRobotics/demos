@@ -41,6 +41,7 @@ import docking.srv as docking
 from geometry_msgs.msg import Quaternion, Point, PoseStamped, Pose
 from fiducial_msgs.msg import FiducialArray, FiducialMapEntryArray
 from move_basic.msg import FollowMode
+from std_msgs.msg import String
 import move_base_msgs.msg
 import tf
 from tf.transformations import quaternion_from_euler
@@ -94,6 +95,9 @@ class Dock:
         # Publish follow mode messages to control the speed
         self.follow_pub = rospy.Publisher("/follow_mode", FollowMode, queue_size=1)
 
+        # Publish messages to control ignoring of fiducials
+        self.ignore_pub = rospy.Publisher("/ignore_fiducials", String, queue_size=1)
+
         # Create a proxy object for the move action server
         self.move = actionlib.SimpleActionClient('/move_base',
                                                  move_base_msgs.msg.MoveBaseAction)
@@ -119,11 +123,19 @@ class Dock:
                                               "fiducial_%d" % self.target_fiducial,
                                               "map")
 
+    # Called when map messages are received
     def fiducial_callback(self, msg):
         for fiducial in msg.fiducials:
             if fiducial.fiducial_id == self.target_fiducial:
                 self.seen_fiducial = True
 
+    # Publish a message to ignore fiducials
+    def ignore_fiducials(self, fid=None):
+        if not fid is None:
+            msg = "%d-%d,%d-%d" % (0, fid-1, fid+1, 10000)
+        else:
+            msg = ""
+        self.ignore_pub.publish(msg)
 
     # This is called when we receive a rotate service call
     def service_callback(self, req):
@@ -136,9 +148,9 @@ class Dock:
         num_rotations = 0
         self.target_fiducial = None
         self.seen_fiducial = False
+        self.ignore_fiducials(req.fiducial_id)
 
         self.target_fiducial = req.fiducial_id
-        self.clear_map(req.fiducial_id)
 
         # Rotate until we find the target
         while not self.seen_fiducial and num_rotations < self.rotation_limit:
@@ -251,6 +263,7 @@ class Dock:
         self.move.send_goal(goal)
         self.move.wait_for_result(rospy.Duration(50.0))
 
+        self.ignore_fiducials()
         return self.move.get_state() == GoalStatus.SUCCEEDED
 
     # Just sleep while the node is running
