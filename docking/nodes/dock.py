@@ -180,6 +180,9 @@ class Dock:
             response.success = False
             return response
 
+        # Be sure robot has stopped moving
+        time.sleep(1.5)
+
         # Look up our current position in the fiducial's frame
         trans = self.getPose()
         if trans is None:
