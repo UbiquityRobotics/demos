@@ -168,6 +168,7 @@ class Dock:
                                   targetFrame="odom"):
                     num_rotations += 1
                 else:
+                    self.ignore_fiducials()
                     response.message = "Error rotating"
                     response.success = False
                     return response
@@ -176,6 +177,7 @@ class Dock:
 
         # Create a negative response to our rotate service call
         if not self.seen_fiducial:
+            self.ignore_fiducials()
             response.message = "Not fiducial seen after rotating"
             response.success = False
             return response
@@ -186,6 +188,7 @@ class Dock:
         # Look up our current position in the fiducial's frame
         trans = self.getPose()
         if trans is None:
+            self.ignore_fiducials()
             response.message = "Could not get current position to determine evacuation point"
             rospy.logerr(response.message)
             response.success = False
@@ -196,6 +199,7 @@ class Dock:
         for wp_str in req.waypoints.split(","):
             elems = wp_str.strip(" ").split()
             if not len(elems) == 4:
+                self.ignore_fiducials()
                 response.message = "Invalid waypoint %s: expect x, y, theta, v" % elems
                 response.success = False
                 return response
@@ -217,6 +221,7 @@ class Dock:
             p = Point(x, y, 0)
             if not self.goto_goal(Quaternion(*q), position=Point(x, y, 0),
                                   frame="fiducial_%d" % self.target_fiducial):
+                 self.ignore_fiducials()
                  response.message += "Error going to goal %s %s %s" % (x, y, theta)
                  response.success = False
                  return response
@@ -225,6 +230,7 @@ class Dock:
                  response.message += "Goal %f %f, actual %f %f; " % (x, y,
                     trans.transform.translation.x, trans.transform.translation.y)
 
+        self.ignore_fiducials()
         response.message += "Completed"
         response.success = True
         return response
@@ -265,8 +271,6 @@ class Dock:
         goal.target_pose = pose_odom
         self.move.send_goal(goal)
         self.move.wait_for_result(rospy.Duration(50.0))
-
-        self.ignore_fiducials()
         return self.move.get_state() == GoalStatus.SUCCEEDED
 
     # Just sleep while the node is running
