@@ -40,6 +40,8 @@ from actionlib_msgs.msg import *
 import docking.srv as docking
 from geometry_msgs.msg import Quaternion, Point, PoseStamped, Pose
 from fiducial_msgs.msg import FiducialArray, FiducialMapEntryArray
+from move_basic.msg import FollowMode
+from std_msgs.msg import String
 import move_base_msgs.msg
 import tf
 from tf.transformations import quaternion_from_euler
@@ -85,11 +87,16 @@ class Dock:
         self.target_fiducial = None
         self.fiducial_sub = rospy.Subscriber("/fiducial_vertices",
                                              FiducialArray, self.fiducial_callback)
-
         # Subscribe to fiducial map messages
         self.broadcaster = tf.TransformBroadcaster()
         self.map_sub = rospy.Subscriber("/fiducial_map",
                                         FiducialMapEntryArray, self.map_callback)
+
+        # Publish follow mode messages to control the speed
+        self.follow_pub = rospy.Publisher("/follow_mode", FollowMode, queue_size=1)
+
+        # Publish messages to control ignoring of fiducials
+        self.ignore_pub = rospy.Publisher("/ignore_fiducials", String, queue_size=1)
 
         # Create a proxy object for the move action server
         self.move = actionlib.SimpleActionClient('/move_base',
@@ -104,7 +111,6 @@ class Dock:
 
         self.ok = True
 
-
     def map_callback(self, msg):
         # Publish a tf to create a fiducial frame, on the floor
 	# behind the fiducial with x pointing backwards
@@ -114,35 +120,55 @@ class Dock:
                q = quaternion_from_euler(0.0, fiducial.ry,
                                          math.pi/2.0 + fiducial.rz)
                self.broadcaster.sendTransform(t, q, rospy.Time.now(),
-                                              "fiducial", "map")
+                                              "fiducial_%d" % self.target_fiducial,
+                                              "map")
 
+    # Called when map messages are received
     def fiducial_callback(self, msg):
         for fiducial in msg.fiducials:
             if fiducial.fiducial_id == self.target_fiducial:
                 self.seen_fiducial = True
 
+    # Publish a message to ignore fiducials
+    def ignore_fiducials(self, fid=None):
+        if not fid is None:
+            msg = "%d-%d,%d-%d" % (0, fid-1, fid+1, 10000)
+        else:
+            msg = ""
+        self.ignore_pub.publish(msg)
+
     # This is called when we receive a rotate service call
     def service_callback(self, req):
-        print("Received dock service call")
-        print("Fiducial %d, waypoints %s" % (req.fiducial_id, req.waypoints))
+        rospy.loginfo("Dock service call: fiducial %d, waypoints %s" % \
+                      (req.fiducial_id, req.waypoints))
 
         # Create a response to our service which we return later
         response = docking.DockResponse()
 
         num_rotations = 0
+        self.target_fiducial = None
         self.seen_fiducial = False
+        self.ignore_fiducials(req.fiducial_id)
+
         self.target_fiducial = req.fiducial_id
 
         # Rotate until we find the target
         while not self.seen_fiducial and num_rotations < self.rotation_limit:
-            time.sleep(1)
+            t = 0
+            while t < 3:
+                time.sleep(0.5)
+                if self.seen_fiducial:
+                   break
+                t += 3.5
             if not self.seen_fiducial:
                 rospy.loginfo("Rotating to search for fiducial")
                 q = quaternion_from_euler(0, 0,
                         self.angle_increment)
-                if self.goto_goal(Quaternion(*q)):
+                if self.goto_goal(Quaternion(*q), frame="base_footprint",
+                                  targetFrame="odom"):
                     num_rotations += 1
                 else:
+                    self.ignore_fiducials()
                     response.message = "Error rotating"
                     response.success = False
                     return response
@@ -151,18 +177,20 @@ class Dock:
 
         # Create a negative response to our rotate service call
         if not self.seen_fiducial:
+            self.ignore_fiducials()
             response.message = "Not fiducial seen after rotating"
             response.success = False
             return response
 
+        # Be sure robot has stopped moving
+        time.sleep(1.5)
+
         # Look up our current position in the fiducial's frame
-        try:
-            trans = self.tf_buffer.lookup_transform("fiducial",
-                                                    "base_footprint",
-                                                    rospy.Time())
-        except (tf2_ros.LookupException, tf2_ros.ConnectivityException,
-                tf2_ros.ExtrapolationException):
+        trans = self.getPose()
+        if trans is None:
+            self.ignore_fiducials()
             response.message = "Could not get current position to determine evacuation point"
+            rospy.logerr(response.message)
             response.success = False
             return response
 
@@ -170,34 +198,59 @@ class Dock:
         waypoints = []
         for wp_str in req.waypoints.split(","):
             elems = wp_str.strip(" ").split()
-            if not len(elems) == 3:
-                response.message = "Invalid waypoint %s" % elems
+            if not len(elems) == 4:
+                self.ignore_fiducials()
+                response.message = "Invalid waypoint %s: expect x, y, theta, v" % elems
                 response.success = False
                 return response
-            x, y, heading = elems
+            x, y, theta, speed = elems
             if x == "X":
                 x = trans.transform.translation.x
             if y == "Y":
                 y = trans.transform.translation.y
-            waypoints.append((float(x), float(y), float()))
+            waypoints.append((float(x), float(y), float(theta), float(speed)))
 
         # Go to each waypoint in succession
-        for x, y, theta in waypoints:
+        response.message = ""
+        for x, y, theta, speed in waypoints:
             rospy.loginfo("Going to goal %f %f %f", x, y, theta)
+            msg = FollowMode()
+            msg.speed = speed
+            self.follow_pub.publish(msg)
             q = quaternion_from_euler(0, 0, radians(theta))
             p = Point(x, y, 0)
             if not self.goto_goal(Quaternion(*q), position=Point(x, y, 0),
-                                  frame="fiducial"):
-                 response.message = "Error going to goal %s %s %s" % (x, y, theta)
+                                  frame="fiducial_%d" % self.target_fiducial):
+                 self.ignore_fiducials()
+                 response.message += "Error going to goal %s %s %s" % (x, y, theta)
                  response.success = False
                  return response
+            else:
+                 trans = self.getPose()
+                 response.message += "Goal %f %f, actual %f %f; " % (x, y,
+                    trans.transform.translation.x, trans.transform.translation.y)
 
-        response.message = "Completed"
+        self.ignore_fiducials()
+        response.message += "Completed"
         response.success = True
         return response
 
+    # Look up our current position in the fiducial's frame
+    def getPose(self):
+        try:
+            trans = self.tf_buffer.lookup_transform("fiducial_%d" % self.target_fiducial,
+                                                    "base_footprint",
+                                                    rospy.Time(), rospy.Duration(5))
+            rospy.loginfo("Current position relative to fiducial %f %f" % \
+                          (trans.transform.translation.x,
+                           trans.transform.translation.y))
+            return trans
+        except (tf2_ros.LookupException, tf2_ros.ConnectivityException,
+                tf2_ros.ExtrapolationException):
+            return None
+
     # Go to a goal
-    def goto_goal(self, orientation, position=Point(), frame=None):
+    def goto_goal(self, orientation, position=Point(), frame=None, targetFrame="map"):
         goal = move_base_msgs.msg.MoveBaseGoal()
         if frame is None:
             pose_base = PoseStamped()
@@ -210,14 +263,14 @@ class Dock:
             pose_base.pose.position = position
             pose_base.header.frame_id = frame
         try:
-            pose_odom = self.tf_buffer.transform(pose_base, "map", rospy.Duration(1.0))
+            pose_odom = self.tf_buffer.transform(pose_base, targetFrame,
+                                                 rospy.Duration(1.0))
         except:
-            rospy.logerr("Unable to transform goal into map frame")
+            rospy.logerr("Unable to transform goal into target frame")
             return False
         goal.target_pose = pose_odom
         self.move.send_goal(goal)
         self.move.wait_for_result(rospy.Duration(50.0))
-
         return self.move.get_state() == GoalStatus.SUCCEEDED
 
     # Just sleep while the node is running
