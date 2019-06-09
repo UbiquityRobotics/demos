@@ -50,6 +50,7 @@ import tf2_geometry_msgs
 import math
 import traceback
 from geometry_msgs.msg import Quaternion, Point
+from fiducial_slam.srv import AddFiducial
 import time
 
 
@@ -106,6 +107,10 @@ class Dock:
            rospy.logerr("Move service not available")
            self.move = None
            return
+
+        self.add_fiducial = rospy.ServiceProxy('/fiducial_slam/add_fiducial',
+                                               AddFiducial)
+
         rospy.loginfo("Ready")
         self.seen_fiducial = False
 
@@ -122,6 +127,7 @@ class Dock:
                self.broadcaster.sendTransform(t, q, rospy.Time.now(),
                                               "fiducial_%d" % self.target_fiducial,
                                               "map")
+               self.fiducial_in_map = True
 
     # Called when map messages are received
     def fiducial_callback(self, msg):
@@ -148,6 +154,7 @@ class Dock:
         num_rotations = 0
         self.target_fiducial = None
         self.seen_fiducial = False
+        self.fiducial_in_map = False
         self.ignore_fiducials(req.fiducial_id)
 
         self.target_fiducial = req.fiducial_id
@@ -184,6 +191,18 @@ class Dock:
 
         # Be sure robot has stopped moving
         time.sleep(1.5)
+
+        self.add_fiducial(self.target_fiducial)
+        count = 0
+        while not self.fiducial_in_map and count < 5:
+            time.sleep(1.0)
+            count += 1
+
+        if not self.fiducial_in_map:
+            self.ignore_fiducials()
+            response.message = "Fiducial was not added to map"
+            response.success = False
+            return response
 
         # Look up our current position in the fiducial's frame
         trans = self.getPose()
