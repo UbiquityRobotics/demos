@@ -160,7 +160,6 @@ class Dock:
         self.target_fiducial = req.fiducial_id
 
         # Rotate until we find the target
-        self.ignore_fiducials(0)
         while not self.seen_fiducial and num_rotations < self.rotation_limit:
             t = 0
             while t < 3:
