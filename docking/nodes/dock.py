@@ -28,7 +28,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """
 Rotate to find a fiducial, and then navigate to a series of points
 
-It provides a service /rotate, which can be called from the command line:
+It provides a service /dock, which can be called from the command line:
 
 $ rosservice call /dock
 
@@ -50,6 +50,7 @@ import tf2_geometry_msgs
 import math
 import traceback
 from geometry_msgs.msg import Quaternion, Point
+from fiducial_slam.srv import AddFiducial
 import time
 
 
@@ -106,6 +107,10 @@ class Dock:
            rospy.logerr("Move service not available")
            self.move = None
            return
+
+        self.add_fiducial = rospy.ServiceProxy('/fiducial_slam/add_fiducial',
+                                               AddFiducial)
+
         rospy.loginfo("Ready")
         self.seen_fiducial = False
 
@@ -122,6 +127,7 @@ class Dock:
                self.broadcaster.sendTransform(t, q, rospy.Time.now(),
                                               "fiducial_%d" % self.target_fiducial,
                                               "map")
+               self.fiducial_in_map = True
 
     # Called when map messages are received
     def fiducial_callback(self, msg):
@@ -148,6 +154,7 @@ class Dock:
         num_rotations = 0
         self.target_fiducial = None
         self.seen_fiducial = False
+        self.fiducial_in_map = False
         self.ignore_fiducials(req.fiducial_id)
 
         self.target_fiducial = req.fiducial_id
@@ -159,12 +166,12 @@ class Dock:
                 time.sleep(0.5)
                 if self.seen_fiducial:
                    break
-                t += 3.5
+                t += 0.5
             if not self.seen_fiducial:
                 rospy.loginfo("Rotating to search for fiducial")
                 q = quaternion_from_euler(0, 0,
                         self.angle_increment)
-                if self.goto_goal(Quaternion(*q), frame="base_footprint",
+                if self.goto_goal(Quaternion(*q), frame="base_link",
                                   targetFrame="odom"):
                     num_rotations += 1
                 else:
@@ -184,6 +191,18 @@ class Dock:
 
         # Be sure robot has stopped moving
         time.sleep(1.5)
+
+        self.add_fiducial(self.target_fiducial)
+        count = 0
+        while not self.fiducial_in_map and count < 5:
+            time.sleep(1.0)
+            count += 1
+
+        if not self.fiducial_in_map:
+            self.ignore_fiducials()
+            response.message = "Fiducial was not added to map"
+            response.success = False
+            return response
 
         # Look up our current position in the fiducial's frame
         trans = self.getPose()
@@ -239,7 +258,7 @@ class Dock:
     def getPose(self):
         try:
             trans = self.tf_buffer.lookup_transform("fiducial_%d" % self.target_fiducial,
-                                                    "base_footprint",
+                                                    "base_link",
                                                     rospy.Time(), rospy.Duration(5))
             rospy.loginfo("Current position relative to fiducial %f %f" % \
                           (trans.transform.translation.x,
@@ -250,18 +269,13 @@ class Dock:
             return None
 
     # Go to a goal
-    def goto_goal(self, orientation, position=Point(), frame=None, targetFrame="map"):
+    def goto_goal(self, orientation, position=Point(), frame="base_link",
+                  targetFrame="map"):
         goal = move_base_msgs.msg.MoveBaseGoal()
-        if frame is None:
-            pose_base = PoseStamped()
-            pose_base.header.frame_id = "base_footprint"
-            pose_base.pose.orientation = orientation
-            pose_base.pose.position = position
-        else:
-            pose_base = PoseStamped()
-            pose_base.pose.orientation = orientation
-            pose_base.pose.position = position
-            pose_base.header.frame_id = frame
+        pose_base = PoseStamped()
+        pose_base.pose.orientation = orientation
+        pose_base.pose.position = position
+        pose_base.header.frame_id = frame
         try:
             pose_odom = self.tf_buffer.transform(pose_base, targetFrame,
                                                  rospy.Duration(1.0))
