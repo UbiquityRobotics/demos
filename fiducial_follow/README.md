@@ -9,7 +9,7 @@ to detect fiducials in the image feed from a camera.  If the `target_fiducial`
 is detected, movement commands are issued to the robot to make it move towards
 the fiducial.
 
-In late 2019 a simple yet flexible interface has been added to greatly increase the possible usage of follow.py to do useful and programable on the fly following of pre placed fiducials on the floor or walls.
+A simple yet flexible interface has been added to greatly increase the possible usage of follow.py to do useful and programable on the fly following of pre placed fiducials on the floor or walls.
 There is an interface to follow.py that allows control using messages on topic /follower_commands which follow.py listens upon.  A list of fiducials for the robot to follow can be received up front or as the robot progresses.
 The status for completed commands comes out on topic /follower_status.  Included in the commands are simple movement commands that allow the robot to drive or turn which could be useful to find the next fiducial if it is out of view after the prior fiducial has been found.  This also allows use of different paths through floor based fiducials based on the directions in the commands to turn towards the next fiducial target.
 
@@ -35,13 +35,27 @@ The status for completed commands comes out on topic /follower_status.  Included
 `follower_Command`:(custom_msgs/FollowerCommand)
 
 ### Example usage for simple single fiducial following
+For the simple legacy fiducial follow mode a single aruco fiducial of size 140mm on edge of the black pattern that is number 49 is used.
+Prepare such a fiducial and place it where the robot can see it with the camera then start the program.
 
-    rosrun fiducial_follow follow.py
+    roslaunch magni_demos fiducial_follow.launch
 
 ### Usage for following a sequence of fiducials and/or performing simple movements
 
 The follow.py script can act on commands sent to it using ros topic /follower_commands.
 These commands arrive in a general message, FollowerCommand, upon a well known topic of /follower_commands that is monitored by the follower script. 
+
+#### A very simple example client that issues and listens to status
+
+As an example we have a very simple example called follower_controller.py in the demos repository.
+Take a look at this to see how to send commands and receive status.   This is also a nice starting point for your own simple node if you desire.
+Modify the script perhaps first to just drive a little then print and place your own fiducials and have it follow them in some order you define.
+Keep in mind that the basic rotate may have to be used to point the robot in the general direction of the next fiducial.
+You would first run the fiducial_follow node and then the command below would start this sample client node
+
+    python ./follower_controller.py 
+
+#### A very simple example client that issues and listens to status
 
 The general message has these fields which are standard ROS format types, mostly just strings
 
@@ -56,6 +70,8 @@ The general message has these fields which are standard ROS format types, mostly
 The above command is in a general form.  Below are the command types to the left and we indicate which parameter(s) are used for the command.  Any user inputs can be in `comment` and a user may use this for triggering his app or just readable status message.
 
 It is important to keep in mind that sending these commands adds them to a queue.  So if 3 commands are sent right away for the FiducialFollow commandType the 3 will be sought out and driven to one at a time.  All commands are processed in first in first executed order.  
+
+#### The commandTypes To The Fiducial Follow node
 
 * `FollowFiducial` The `strParam1` string will be the next fiducial to be followed such as `fid101`.  The `actionOnDone` is generally assumed to be just to move on to do the next command but in this case you may set `KeepFollowing` so the robot continues to follow this fiducial.    
 * `DriveForward`  The numParam1 parameter is the time in seconds to drive straight forward at the rate set using the `drive_rate` which was set as a parameter or modified most recently using the SetDriveRate command
@@ -75,3 +91,17 @@ It is important to keep in mind that sending these commands adds them to a queue
 * `ClearInProgress`  RESERVED command type to stop the robot from any current movement command.  FUTURE PLAN
 
 * `StopMovement`  RESERVED command to stop the robot from any current movement command.   FUTURE PLAN
+
+#### The Status Messages published by Fiducial Follow node
+
+The node will publish status messages which may be valuable for a client node.
+At this time these messages are not greatly thought out for some 'grand scheme' as that depends on a users specific needs.
+Generally we send one status as it is the start of that command to be acted upon and then send a status on completion.
+
+* `commandType`  String that normally shows the command for which this status applies.
+* `statusState`  String that indicates something about the state such as a new command starting to be run or is Done.
+* `string1`  String that often states more about the action or more about units something is being set
+* `string2`  Second string for status that is not used in early versions of this script
+* `num1`  Floating point numeric value. Often this can be a value for a set type of operation for verification
+* `num2`  Second floating point value, not used yet.
+* `statusBits`  An unused integer perhaps of value for future or user extensions of this script
