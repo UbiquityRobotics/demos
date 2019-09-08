@@ -464,8 +464,8 @@ class Follow:
             angular_error = math.atan2(self.fid_y, self.fid_x)
 
             if self.debug_follow == True:
-                print "Errors: forward %f lateral %f angular %f" % \
-                    (forward_error, lateral_error, degrees(angular_error))
+                print "DistToFid: %f Errors: forward %f lateral %f angular %f" % \
+                    (self.fid_x, forward_error, lateral_error, degrees(angular_error))
 
             if self.fid_in_view:
                 times_since_last_fid = 0
