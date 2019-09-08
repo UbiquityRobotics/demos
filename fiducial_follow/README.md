@@ -55,9 +55,10 @@ You would first run the fiducial_follow node and then the command below would st
 
     python ./follower_controller.py 
 
-#### A very simple example client that issues and listens to status
+#### The general purpose command message
 
-The general message has these fields which are standard ROS format types, mostly just strings
+The general message has these fields which are standard ROS format types, mostly just strings.
+The messages are in demos/custom_messages so that they can stand alone for other apps or nodes
 
 * `commandType`  String such as `RotateRight` or `FollowFiducial` to set next target
 * `actionOnDone`  String that Tells what will be done after the command.  This is specific to the command used
