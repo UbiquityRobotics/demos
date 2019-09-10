@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
 """
-Copyright (c) 2017, Ubiquity Robotics
+Copyright (c) 2019, Ubiquity Robotics
 All rights reserved.
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are met:
@@ -74,7 +74,7 @@ class Controller:
        self.cmdStatusInProgress = "InProgress"
        self.cmdStatusDone       = "Done"
 
-       # define names for specific commands 
+       # define names for specific commands which MUST be same as used by follow.py
        self.cmdFollowFiducial  = "FollowFiducial"
        self.cmdClearCommands   = "ClearCommands"
        self.cmdClearInProgress = "ClearInProgress"
@@ -92,6 +92,7 @@ class Controller:
         cmdMsg.numParam1     = numParam1
         cmdMsg.comment       = comment
         self.followerCmdPub.publish(cmdMsg)
+        time.sleep(1.0)      # we have to wait a while between commands
 
     """
     Called when a Tracker Command is received
@@ -124,24 +125,18 @@ class Controller:
         # Fire off the commands we want to send.  THIS is the meat of this script's purpose
         # To make this nicer we could read from a file or get user input and so on
         # publishFollowerCommand(self, cmdType, actionOnDone, string1, numParam1, comment)
-        time.sleep(0.5)
-        self.publishFollowerCommand("SetDriveRate", " ", " ", 0.1, "Set drive rate")
-        time.sleep(0.5)
-        self.publishFollowerCommand("SetRotateRate", " ", " ", 0.3, "Set rotate rate")
-        time.sleep(0.5)
-        self.publishFollowerCommand("DriveForward", " ", " ", 0.7, "Drive forward a little bit")
-        time.sleep(0.5)
-        self.publishFollowerCommand("RotateLeft", " ", " ", 0.3, "Rotate left a little bit")
-        time.sleep(0.5)
-        self.publishFollowerCommand("RotateRight", " ", " ", 0.3, "Rotate right back again")
-        time.sleep(0.5)
-        self.publishFollowerCommand("FollowFiducial", "StopFollowing", "fid103", 0.0, "Follow fiducial 1")
-        time.sleep(0.5)
-        self.publishFollowerCommand("FollowFiducial", "StopFollowing", "fid104", 0.0, "Follow fiducial 2")
-        time.sleep(0.5)
-        self.publishFollowerCommand("RotateRight", " ", " ", 1.0, "Rotate right to next fiducial")
-        time.sleep(0.5)
-        self.publishFollowerCommand("FollowFiducial", "KeepFollowing", "fid105", 0.0, "Keep Follow fiducial 3")
+        self.publishFollowerCommand("ClearCommands", " ", " ", 0.0, "Clear all pending commands")
+        #self.publishFollowerCommand("SetDriveRate", " ", " ", 0.1, "Set drive rate")
+        #self.publishFollowerCommand("SetRotateRate", " ", " ", 0.4, "Set rotate rate")
+        #self.publishFollowerCommand("DriveForward", " ", " ", 2.0, "Drive forward a little bit")
+        #self.publishFollowerCommand("RotateLeft", " ", " ", 2.0, "Rotate left a little bit")
+        #self.publishFollowerCommand("RotateRight", " ", " ", 2.0, "Rotate right back again")
+        self.publishFollowerCommand("FollowFiducial", "DoNextCommand", "fid102", 0.0, "Follow fiducial 1")
+        self.publishFollowerCommand("WaitInSeconds", " ", " ", 6.0, "Wait 6 sec ")
+        #self.publishFollowerCommand("RotateRight", " ", " ", 1.0, "Rotate right back again")
+        self.publishFollowerCommand("FollowFiducial", "DoNextCommand", "fid103", 0.0, "Follow fiducial 2")
+        #self.publishFollowerCommand("RotateRight", " ", " ", 1.0, "Rotate right to next fiducial")
+        self.publishFollowerCommand("FollowFiducial", "KeepFollowing", "fid104", 0.0, "Keep Follow fiducial 3")
 
         print "Commands sent "
 

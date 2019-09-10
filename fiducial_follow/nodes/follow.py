@@ -54,12 +54,22 @@ cmdNameFollowFiducial  = "FollowFiducial"
 cmdNameClearCommands   = "ClearCommands"
 cmdNameClearInProgress = "ClearInProgress"
 cmdNameStopMovement    = "StopMovement"
+cmdNameWaitInSeconds   = "WaitInSeconds"
 cmdNameDriveForward    = "DriveForward"
 cmdNameDriveReverse    = "DriveReverse"
 cmdNameSetDriveRate    = "SetDriveRate"
 cmdNameRotateLeft      = "RotateLeft"
 cmdNameRotateRight     = "RotateRight"
 cmdNameSetRotateRate   = "SetRotateRate"
+
+# define global names for actions to be taken after command completes
+actOnDoneStopFollowing = "StopFollowing"
+actOnDoneDoNextCommand = "DoNextCommand"
+actOnDoneKeepFollowing = "KeepFollowing"
+
+# define global status states
+cmdStatusInProgress = "CmdInProgress"
+cmdStatusDone       = "CmdDone"
 
 class Follow:
     """
@@ -116,16 +126,11 @@ class Follow:
 
        # default action we will use once we actually find and have approached the fiducial
        # The awaitNextCommand action will continue to follow until a new command comes in
-       self.actOnDoneStopFollowing = "StopFollowing"
-       self.actOnDoneDoNextCommand = "DoNextCommand"
-       self.actOnDone = self.actOnDoneDoNextCommand
+       self.actOnDone = actOnDoneDoNextCommand
 
        # We need a state to indicate for the current command so we define 'InProgress' and 'Done'
        # When cmdStatus is InProgress we do not read new command except state control commands
-       self.cmdStatusInProgress = "InProgress"
-       self.cmdStatusDone       = "Done"
-       self.cmdStatus = self.cmdStatusDone
-
+       self.cmdStatus = cmdStatusDone
 
        # ---------------------- End keywords for use in commands ---------------------------
 
@@ -281,13 +286,13 @@ class Follow:
 
         # special control commands handled here prior to commands that go into the queue
         if cmdType == cmdNameClearInProgress: 
-            self.cmdStatus = self.cmdStatusDone
+            self.cmdStatus = cmdStatusDone
         elif cmdType == cmdNameStopMovement: 
             # Set the null fiducial which in effect leads to limbo or the next command if there is one
-            self.actOnDone       = self.actOnDoneDoNextCommand
+            self.actOnDone       = actOnDoneDoNextCommand
             self.target_fiducial = self.null_fiducial
             self.cmd_comment     = "clear any current movement command"
-            self.cmdStatus       = self.cmdStatusDone
+            self.cmdStatus       = cmdStatusDone
         elif cmdType == cmdNameSetDriveRate:
             # set a new drive rate in meters per second
             if (numParam1 > 0.02) and (numParam1 < 1.2):
@@ -342,7 +347,7 @@ class Follow:
             # The cmdStatus of InProgress can be cleared but only as a special command
             # of clearInProgress received right off of the inbound command topic
             inboundCmdCount = len(self.commandQueue)
-            if (inboundCmdCount > 0) and (self.cmdStatus != self.cmdStatusInProgress):
+            if (inboundCmdCount > 0) and (self.cmdStatus != cmdStatusInProgress):
                 newCommand  = self.commandQueue.pop(0)
 
                 # This unpacking must be consistent with commandQueue append on message reception
@@ -354,17 +359,33 @@ class Follow:
 
                 # default is when done fetch another command
                 self.currentCommand  = cmdType
-                self.cmdStatus       = self.cmdStatusInProgress
+                self.cmdStatus       = cmdStatusInProgress
                 self.cmd_comment     = cmdComment
 
                 # set the action on command done so we know what to do after this command 
-                self.actOnDone = self.actOnDoneDoNextCommand
+                self.actOnDone = actOnDoneDoNextCommand
 
                 if cmdType == cmdNameFollowFiducial:
                     # set new fiducial to follow with required end action once we have tracked it
                     self.target_fiducial = strParam1
                     self.actOnDone       = actOnDone      # required parameter for a follow
+                    self.fid_in_view     = False          # force at least one target acquisition
                     self.publishStatus1Str(cmdType, "SetNewFiducial", self.target_fiducial)
+
+                if cmdType == cmdNameClearInProgress:
+                    self.publishStatus1Str(cmdType, "ClearInProgress", "Clear current command if any.")
+                    self.cmdStatus       = cmdStatusDone
+
+                if cmdType == cmdNameWaitInSeconds:
+                    # Wait before going on to next command
+                    self.publishStatus1StrAndValue(cmdType, "Waiting", "Wait for seconds of ", numParam1)
+                    # this wait would be best doing full loop so we could break out of it. 
+                    sleepTime = numParam1
+                    while (sleepTime > 0.0):
+                        rate.sleep()
+                        sleepTime = sleepTime - secPerLoop 
+                    self.cmdStatus       = cmdStatusDone
+                    self.publishStatus1Str(cmdType, "Waiting", "Wait is done.")
 
                 elif cmdType == cmdNameDriveForward:
                     # Drive straight for the specified time in seconds of numParam1 at the current drive_rate
@@ -401,12 +422,11 @@ class Follow:
                 elif cmdType == cmdNameClearCommands:
                     # The queue has been cleared for all but this one but we may need to
                     # cleanup some state in this background loop so do that now
-                    self.cmdStatus       = self.cmdStatusDone
+                    self.cmdStatus       = cmdStatusDone
                     driveRate            = 0.0
                     rotateRate           = 0.0
                 else:
                     print "Invalid command of '%s'. No action taken" % (cmdType)
-
 
             # Handle drive and rotate commands until they time out
             if (self.moveTimeLeft > 0.0):
@@ -414,7 +434,7 @@ class Follow:
                 twist = Twist()
                 twist.angular.z = 0.0
                 twist.linear.x  = 0.0
-                if (self.cmdStatus == self.cmdStatusInProgress) and (self.moveTimeLeft > 0.0):
+                if (self.cmdStatus == cmdStatusInProgress) and (self.moveTimeLeft > 0.0):
                     if (cmdType == cmdNameDriveForward) or (cmdType == cmdNameDriveReverse): 
                         twist.linear.x   = driveRate
                     if (cmdType == cmdNameRotateLeft) or (cmdType == cmdNameRotateRight):
@@ -424,7 +444,7 @@ class Follow:
                         self.publishStatus1Str(cmdType, "Done", "Driving completed")
                     elif (cmdType == cmdNameRotateLeft) or (cmdType == cmdNameRotateRight):
                         self.publishStatus1Str(cmdType, "Done", "Rotation completed")
-                    self.cmdStatus       = self.cmdStatusDone
+                    self.cmdStatus       = cmdStatusDone
                     driveRate            = 0.0
                     rotateRate           = 0.0
 
@@ -517,12 +537,12 @@ class Follow:
                 and (abs(linSpeed) < 0.01) and (abs(angSpeed) < 0.01):
                 # Here is logic to stop following if we think we are at the target
                 # and we see the target and action once found is set to stop following
-                if  (self.cmdStatus == self.cmdStatusInProgress) and \
+                if  (self.cmdStatus == cmdStatusInProgress) and \
                     (self.currentCommand == cmdNameFollowFiducial):
                    print "Arrived at following fiducial %s  actionOnDone %s comment %s\n" % \
                        (self.target_fiducial, self.actOnDone, self.cmd_comment)
-                   if (self.actOnDone == self.actOnDoneDoNextCommand):
-                       self.cmdStatus = self.cmdStatusDone
+                   if (self.actOnDone != actOnDoneKeepFollowing):
+                       self.cmdStatus = cmdStatusDone
                        self.target_fiducial = self.null_fiducial
                        self.fid_in_view = False
                        self.publishStatus1Str(cmdType, "AtFiducial", "Proceeding to next command")
