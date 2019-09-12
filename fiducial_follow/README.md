@@ -19,6 +19,8 @@ The status for completed commands comes out on topic /follower_status.  Included
 * `target_fiducial`: the fiducial we are following. Use `none` to start idle. Default `fid_49`.
 * `min_dist`: the minimum distance in meters to consider it followed. Default `0.4`.
 * `max_dist`: the maximum distance in meters where we will try to follow. Default `4.5`.
+* `max_linear_rate`: the maximum approach speed we will use when following straight ahead in meters per sec. Default `1.0`.
+* `max_angular_rate`: the maximum rotation speed we will use when following and must turn in radians per sec. Default `1.2`.
 * `search_for_target`: rotate to find the fiducial if it is not in view. Default `True`.
 * `lost_angular_rate`: angular rotation rate in radians per sec used in searching. Default `0.6`.
 * `drive_rate`: rate in meters per second for the simple drive commands.  Default `0.4`.
@@ -26,13 +28,13 @@ The status for completed commands comes out on topic /follower_status.  Included
 
 ### Publications
 
-`cmd_vel`(geometry_msgs/Twist): commands to move the robot.
-`follower_status`:(custom_msgs/FollowerStatus)
+* `cmd_vel`(geometry_msgs/Twist): commands to move the robot.
+* `follower_status`:(custom_msgs/FollowerStatus)
 
 ### Subscriptions
 
-`fiducial_transforms`:(fiducial_msgs/FiducialTransformArray)
-`follower_Command`:(custom_msgs/FollowerCommand)
+* `fiducial_transforms`:(fiducial_msgs/FiducialTransformArray)
+* `follower_Command`:(custom_msgs/FollowerCommand)
 
 ### Example usage for simple single fiducial following
 For the simple legacy fiducial follow mode a single aruco fiducial of size 140mm on edge of the black pattern that is number 49 is used.
