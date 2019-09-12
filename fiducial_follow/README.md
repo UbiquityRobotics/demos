@@ -74,7 +74,9 @@ It is important to keep in mind that sending these commands adds them to a queue
 
 #### The commandTypes To The Fiducial Follow node
 
-* `FollowFiducial` The `strParam1` string will be the next fiducial to be followed such as `fid101`.  The `actionOnDone` is generally assumed to be just to move on to do the next command but in this case you may set `KeepFollowing` so the robot continues to follow this fiducial.    
+* `FollowFiducial` The `strParam1` string will be the next fiducial to be followed such as `fid101`.  The `actionOnDone` is generally assumed to be just to move on to do the next command. You may specify 'DriveOnTop' for actionOnDone so the robot drives itself over the fiducial.  You may specify 'AssumePose' for actionOnDone so the robot drives over then rotates to the pose of the fiducial.  You may specify for actionOnDone to `KeepFollowing` so the robot continues to follow this fiducial just like the legacy fiducial follow mode.    
+* `SetMaxLinRate`  The numParam1 parameter is used as the new `max_linear_rate` for finding fiducials. We limit this between very slow to about 1.2 meters per second.
+* `SetMaxAngRate`  The numParam1 parameter is used as the new `max_angular_rate` for following fiducials. We limit this between very slow to about 2.0 meters per second.
 * `DriveForward`  The numParam1 parameter is the time in seconds to drive straight forward at the rate set using the `drive_rate` which was set as a parameter or modified most recently using the SetDriveRate command
 
 * `DriveReverse`  The numParam1 parameter is the time in seconds to drive straight backwards at the rate set using the `drive_rate` which was set as a parameter or modified most recently using the SetDriveRate command
@@ -101,8 +103,8 @@ Generally we send one status as it is the start of that command to be acted upon
 
 * `commandType`  String that normally shows the command for which this status applies.
 * `statusState`  String that indicates something about the state such as a new command starting to be run or is Done.
-* `string1`  String that often states more about the action or more about units something is being set
-* `string2`  Second string for status that is not used in early versions of this script
+* `string1`  String that often states the fiducial involved or just more about the action or more about units something is being set
+* `string2`  Second string is for more optional status some commands may fill in as needed.
 * `num1`  Floating point numeric value. Often this can be a value for a set type of operation for verification
 * `num2`  Second floating point value, not used yet.
 * `statusBits`  An unused integer perhaps of value for future or user extensions of this script

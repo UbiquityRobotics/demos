@@ -35,6 +35,7 @@ sequences of movements and target following
 import rospy
 from geometry_msgs.msg import TransformStamped, Twist
 from fiducial_msgs.msg import FiducialTransform, FiducialTransformArray
+from tf.transformations import euler_from_quaternion, quaternion_from_euler
 
 # our custom messages for the commands we will follow
 from custom_messages.msg import FollowerCommand, FollowerStatus
@@ -50,21 +51,25 @@ def degrees(r):
     return 180.0 * r / math.pi
 
 # define global names for specific commands 
-cmdNameFollowFiducial  = "FollowFiducial"
-cmdNameClearCommands   = "ClearCommands"
-cmdNameClearInProgress = "ClearInProgress"
+cmdNameClearCommands   = "ClearCommands"     # Clear all commands (good idea on start of activities)
+cmdNameFollowFiducial  = "FollowFiducial"    # Approach a fiducial to a distance of 
+cmdNameClearInProgress = "ClearInProgress"   # Clear an in-progress move or wait or fiducial tracking
 cmdNameStopMovement    = "StopMovement"
-cmdNameWaitInSeconds   = "WaitInSeconds"
-cmdNameDriveForward    = "DriveForward"
-cmdNameDriveReverse    = "DriveReverse"
-cmdNameSetDriveRate    = "SetDriveRate"
-cmdNameRotateLeft      = "RotateLeft"
-cmdNameRotateRight     = "RotateRight"
-cmdNameSetRotateRate   = "SetRotateRate"
+cmdNameWaitInSeconds   = "WaitInSeconds"     # Wait the time in seconds specified
+cmdNameDriveForward    = "DriveForward"      # Drive forward for the specified time at the current drive_rate
+cmdNameDriveReverse    = "DriveReverse"      # Drive reverse for the specified time at the current drive_rate
+cmdNameSetDriveRate    = "SetDriveRate"      # Set drive_rate for next drive command
+cmdNameRotateLeft      = "RotateLeft"        # Rotate left   for the specified time at the current rotate_rate
+cmdNameRotateRight     = "RotateRight"       # Rotate right  for the specified time at the current rotate_rate
+cmdNameSetRotateRate   = "SetRotateRate"     # Set rotate_rate for next rotate command
+cmdNameSetMaxLinRate   = "SetMaxLinRate"     # Set maximum linear rate used to approach the target fiducial
+cmdNameSetMaxAngRate   = "SetMaxAngRate"     # Set maximum angular rate used to rotate towards the target fiducial
 
 # define global names for actions to be taken after command completes
 actOnDoneStopFollowing = "StopFollowing"
 actOnDoneDoNextCommand = "DoNextCommand"
+actOnDoneAssumePose    = "AssumePose"        # After finding fiducial, drive over it and rotate to it's pose
+actOnDoneDriveOnTop    = "DriveOnTop"        # After finding fiducial, drive over it
 actOnDoneKeepFollowing = "KeepFollowing"
 
 # define global status states
@@ -85,6 +90,7 @@ class Follow:
 
        # Set up a transform listener so we can lookup transforms in the past
        self.tfBuffer = tf2_ros.Buffer(rospy.Time(30))
+       self.tfDbgBuffer = tf2_ros.Buffer(rospy.Time(30))
        self.lr = tf2_ros.TransformListener(self.tfBuffer)
 
        # Setup a transform broadcaster so that we can publish transforms
@@ -98,6 +104,9 @@ class Follow:
        # define a move time that when non-zero we continue to do rotate or drive commands
        self.moveTimeLeft = 0.0
 
+       # define a wait time that when non-zero we continue to wait and do nothing
+       self.waitTimeLeft = 0.0
+
        # ---------------------- start of keywords for use in commands ---------------------------
 
        # define a fiducial that when set implies we are not seeking any fiducial
@@ -110,7 +119,8 @@ class Follow:
 
        # optionally we can disable verbose debug messages or leave them on as in legacy code
        # these were on in legacy version but can be disabled using parameter below
-       self.debug_follow = rospy.get_param("~debug_follow", True)
+       self.debug_follow  = rospy.get_param("~debug_follow", True)
+       self.debug_verbose = rospy.get_param("~debug_verbose", False)
 
        # Set to True for Legacy follower where we search for the sole fiducial if it goes out of sight
        # to operate in the mode where commands are used via topic this should be False
@@ -189,10 +199,18 @@ class Follow:
        rospy.Subscriber("/fiducial_transforms", FiducialTransformArray, self.newTf)
        self.fid_x = self.min_dist
        self.fid_y = 0
+       self.fid_r = 0
        self.fid_in_view = False
        # ------------------------------------------------------------------
 
     def publishStatus1Str(self, cmdType, statusState, string1):
+        statusMsg = FollowerStatus()
+        statusMsg.commandType = cmdType
+        statusMsg.statusState = statusState
+        statusMsg.string1     = string1
+        self.statusPub.publish(statusMsg)
+
+    def publishStatus2Str(self, cmdType, statusState, string1, string2):
         statusMsg = FollowerStatus()
         statusMsg.commandType = cmdType
         statusMsg.statusState = statusState
@@ -217,6 +235,7 @@ class Follow:
         print imageTime, rospy.Time.now()
         print "*****"
         found = False
+        self.tfDbgBuffer = self.tfBuffer
 
         # For every fiducial found by the dectector, publish a transform
         for m in msg.transforms:
@@ -239,6 +258,19 @@ class Follow:
             t.transform.rotation.w = rot.w
             self.br.sendTransform(t)
 
+            # Get the fiducial position relative to the robot center, instead of the camera
+            if self.debug_verbose == True:
+                self.tfDbgBuffer.set_transform(t, "follow")
+                tfd = self.tfDbgBuffer.lookup_transform("base_link", t.child_frame_id, imageTime)
+                ctd = tfd.transform.translation
+                crd = tfd.transform.rotation
+                print "T_fidBase Quat for fid %d %lf %lf %lf %lf %lf %lf %lf\n" % \
+                             (id, ctd.x, ctd.y, ctd.z, crd.x, crd.y, crd.z, crd.w)
+                quat = (crd.x, crd.y, crd.z, crd.w)
+                (roll, pith, yaw) = euler_from_quaternion(quat)
+                print "T_fidBase euler for fid %d roll %lf  pitch %lf  yaw (z rot) %lf \n" % (id, roll, pith, yaw)
+
+
             if t.child_frame_id == self.target_fiducial:
                 if self.debug_follow == True:
                     print "Fiducial %s found in transforms." % (self.target_fiducial)
@@ -259,15 +291,84 @@ class Follow:
             cr = tf.transform.rotation
             print "T_fidBase %lf %lf %lf %lf %lf %lf %lf\n" % \
                              (ct.x, ct.y, ct.z, cr.x, cr.y, cr.z, cr.w)
+            quat = (cr.x, cr.y, cr.z, cr.w)
+            (roll, pith, yaw) = euler_from_quaternion(quat)
+            print "T_fidBase euler for fid %d roll %lf  pitch %lf  Z rot (yaw) %lf \n" % (id, roll, pith, yaw)
 
-            # Set the state varibles to the position of the fiducial
+            # Set the state varibles to the position and rotation of the fiducial
             self.fid_x = ct.x
             self.fid_y = ct.y
+            self.fid_r = yaw
             self.fid_in_view = True
+
         except:
             traceback.print_exc()
             print "Could not get tf for %s" % self.target_fiducial
 
+
+    # Here we have a routine to process the newly ready to run command
+    # if the command was recognized we return 1 else 0
+    def processNewCommand(self, cmdType, actOnDone, strParam1, numParam1, cmdComment):
+        # default is when done fetch another command
+        self.currentCommand  = cmdType
+        self.cmdStatus       = cmdStatusInProgress
+        self.cmd_comment     = cmdComment
+
+        retCode = 1
+
+        # set the action on command done so we know what to do after this command 
+        self.actOnDone = actOnDoneDoNextCommand
+
+        if cmdType == cmdNameFollowFiducial:
+            # set new fiducial to follow with required end action once we have tracked it
+            self.target_fiducial = strParam1
+            self.actOnDone       = actOnDone      # required parameter for a follow
+            self.fid_in_view     = False          # force at least one target acquisition
+            self.publishStatus1Str(cmdType, "SetNewFiducial", self.target_fiducial)
+
+        elif cmdType == cmdNameWaitInSeconds:
+            # Wait before going on to next command
+            self.publishStatus1StrAndValue(cmdType, "Waiting", "Wait for seconds of ", numParam1)
+            # this wait would be best doing full loop so we could break out of it. 
+            self.waitTimeLeft    = numParam1                  # set the duration of this movement
+            self.cmdStatus       = cmdStatusDone
+
+        elif cmdType == cmdNameDriveForward:
+            # Drive straight for the specified time in seconds of numParam1 at the current drive_rate
+            self.target_fiducial = self.null_fiducial
+            self.moveTimeLeft    = numParam1                  # set the duration of this movement
+            driveRate            = self.drive_rate            # set the rate for this movement
+            self.publishStatus1StrAndValue(cmdType, "Driving", "Drive time in seconds of ", numParam1)
+
+        elif cmdType == cmdNameDriveReverse:
+            # Drive in reverse for the specified time in seconds of numParam1 at the current drive_rate
+            self.target_fiducial = self.null_fiducial
+            self.moveTimeLeft    = numParam1                  # set the duration of this movement
+            driveRate            = self.drive_rate * (-1.0)   # set the rate for this movement
+            self.publishStatus1StrAndValue(cmdType, "Driving", "Drive time in seconds of ", numParam1)
+
+        elif cmdType == cmdNameRotateLeft:
+            # Rotate left for the specified time in seconds of numParam1 at the current rotate_rate
+            self.target_fiducial = self.null_fiducial
+            self.moveTimeLeft    = numParam1                  # set the duration of this movement
+            rotateRate           = self.rotate_rate           # set the rate for this movement
+            self.publishStatus1StrAndValue(cmdType, "RotatingLeft", "Rotate time in seconds of ", numParam1)
+
+        elif cmdType == cmdNameRotateRight:
+            # Rotate right for the specified time in seconds of numParam1 at the current rotate_rate
+            self.target_fiducial = self.null_fiducial
+            self.moveTimeLeft    = numParam1                  # set the duration of this movement
+            rotateRate           = self.rotate_rate * (-1.0)  # set the rate for this movement
+            self.publishStatus1StrAndValue(cmdType, "RotatingRight", "Rotate time in seconds of ", numParam1)
+
+        elif cmdType == cmdNameClearCommands:
+            # The queue has been cleared for all but this one but we may need to
+            # cleanup some state in this background loop so do that now
+            self.cmdStatus       = cmdStatusDone
+        else:
+            print "Invalid command of '%s'. No action taken" % (cmdType)
+            retCode = 0
+        return retCode
 
     """
     Called when a Follower Command is received
@@ -286,7 +387,13 @@ class Follow:
 
         # special control commands handled here prior to commands that go into the queue
         if cmdType == cmdNameClearInProgress: 
-            self.cmdStatus = cmdStatusDone
+            self.cmdStatus       = cmdStatusDone
+            if self.waitTimeLeft > 0.0:
+                self.publishStatus1Str(cmdType, "Waiting", "Canceled due to ClearInProgress")
+            if self.moveTimeLeft > 0.0:
+                self.publishStatus1Str(cmdType, "Moving", "Canceled due to ClearInProgress")
+            self.waitTimeLeft    = 0.0    # clear wait time active or not
+            self.moveTimeLeft    = 0.0    # clear move time active or not
         elif cmdType == cmdNameStopMovement: 
             # Set the null fiducial which in effect leads to limbo or the next command if there is one
             self.actOnDone       = actOnDoneDoNextCommand
@@ -307,6 +414,20 @@ class Follow:
                 self.publishStatus1StrAndValue(cmdType, "Set rotate rate", "Rate in radians per sec of ", numParam1)
             else:
                 self.publishStatus1StrAndValue(cmdType, "Set rotate rate", "Illegal rate in radians per sec of ", numParam1)
+        elif cmdType == cmdNameSetMaxLinRate:
+            # set a new maximum follow linear rate in meters per sec
+            if (numParam1 > 0.02) and (numParam1 < 1.20):
+                self.max_linear_rate = numParam1
+                self.publishStatus1StrAndValue(cmdType, "Set max linear approach rate", "Rate in meters per sec of ", numParam1)
+            else:
+                self.publishStatus1StrAndValue(cmdType, "Set max linear rate", "Illegal rate in meters per sec of ", numParam1)
+        elif cmdType == cmdNameSetMaxAngRate:
+            # set a new maximum follow rotation rate in radians per sec
+            if (numParam1 > 0.02) and (numParam1 < 2.00):
+                self.max_angular_rate = numParam1
+                self.publishStatus1StrAndValue(cmdType, "Set max angular rate", "Rate in radians per sec of ", numParam1)
+            else:
+                self.publishStatus1StrAndValue(cmdType, "Set max angular rate", "Illegal rate in radians per sec of ", numParam1)
         else:
             if cmdType == cmdNameClearCommands:
                 # clear command queue clears queue so it is first and also picked up for any cleanup in loop
@@ -315,6 +436,7 @@ class Follow:
             # place this command and its parameters onto the queue
             # This packing must be consistent with commandQueue unpacking in main routine 
             self.commandQueue.append((cmdType, actOnDone, strParam1, strParam2, numParam1, numParam2, cmdComment))
+
 
     """
     Main loop
@@ -354,79 +476,30 @@ class Follow:
                 # The command message is generic where the context of the parameters are cmdType specific
                 cmdType, actOnDone, strParam1, strParam2, numParam1, numParam2, cmdComment = newCommand
 
-                print "Accept New Command: %s actionOnDone %s str1 %s num1 %lf comment %s\n" % \
-                  (cmdType, actOnDone, strParam1, numParam1, cmdComment)
+                print "Process next queued Command: %s actionOnDone %s str1 %s num1 %lf comment %s\n" % \
+                    (cmdType, actOnDone, strParam1, numParam1, cmdComment)
 
-                # default is when done fetch another command
-                self.currentCommand  = cmdType
-                self.cmdStatus       = cmdStatusInProgress
-                self.cmd_comment     = cmdComment
+                # Interprit the command and set state based on the command
+                cmdValid = self.processNewCommand(cmdType, actOnDone, strParam1, numParam1, cmdComment)
 
-                # set the action on command done so we know what to do after this command 
-                self.actOnDone = actOnDoneDoNextCommand
-
-                if cmdType == cmdNameFollowFiducial:
-                    # set new fiducial to follow with required end action once we have tracked it
-                    self.target_fiducial = strParam1
-                    self.actOnDone       = actOnDone      # required parameter for a follow
-                    self.fid_in_view     = False          # force at least one target acquisition
-                    self.publishStatus1Str(cmdType, "SetNewFiducial", self.target_fiducial)
-
-                if cmdType == cmdNameClearInProgress:
-                    self.publishStatus1Str(cmdType, "ClearInProgress", "Clear current command if any.")
-                    self.cmdStatus       = cmdStatusDone
-
-                if cmdType == cmdNameWaitInSeconds:
-                    # Wait before going on to next command
-                    self.publishStatus1StrAndValue(cmdType, "Waiting", "Wait for seconds of ", numParam1)
-                    # this wait would be best doing full loop so we could break out of it. 
-                    sleepTime = numParam1
-                    while (sleepTime > 0.0):
-                        rate.sleep()
-                        sleepTime = sleepTime - secPerLoop 
-                    self.cmdStatus       = cmdStatusDone
-                    self.publishStatus1Str(cmdType, "Waiting", "Wait is done.")
-
-                elif cmdType == cmdNameDriveForward:
-                    # Drive straight for the specified time in seconds of numParam1 at the current drive_rate
-                    self.target_fiducial = self.null_fiducial
-                    
-                    self.moveTimeLeft    = numParam1                  # set the duration of this movement
-                    driveRate            = self.drive_rate            # set the rate for this movement
-                    self.publishStatus1StrAndValue(cmdType, "Driving", "Drive time in seconds of ", numParam1)
-
-                elif cmdType == cmdNameDriveReverse:
-                    # Drive in reverse for the specified time in seconds of numParam1 at the current drive_rate
-                    self.target_fiducial = self.null_fiducial
-                    
-                    self.moveTimeLeft    = numParam1                  # set the duration of this movement
-                    driveRate            = self.drive_rate * (-1.0)   # set the rate for this movement
-                    self.publishStatus1StrAndValue(cmdType, "Driving", "Drive time in seconds of ", numParam1)
-
-                elif cmdType == cmdNameRotateLeft:
-                    # Rotate left for the specified time in seconds of numParam1 at the current rotate_rate
-                    self.target_fiducial = self.null_fiducial
-                    
-                    self.moveTimeLeft    = numParam1                  # set the duration of this movement
-                    rotateRate           = self.rotate_rate           # set the rate for this movement
-                    self.publishStatus1StrAndValue(cmdType, "RotatingLeft", "Rotate time in seconds of ", numParam1)
-
-                elif cmdType == cmdNameRotateRight:
-                    # Rotate right for the specified time in seconds of numParam1 at the current rotate_rate
-                    self.target_fiducial = self.null_fiducial
-                    
-                    self.moveTimeLeft    = numParam1                  # set the duration of this movement
-                    rotateRate           = self.rotate_rate * (-1.0)  # set the rate for this movement
-                    self.publishStatus1StrAndValue(cmdType, "RotatingRight", "Rotate time in seconds of ", numParam1)
-
-                elif cmdType == cmdNameClearCommands:
-                    # The queue has been cleared for all but this one but we may need to
-                    # cleanup some state in this background loop so do that now
-                    self.cmdStatus       = cmdStatusDone
-                    driveRate            = 0.0
-                    rotateRate           = 0.0
+                if cmdValid == 1:
+                    # some commands need more work here
+                    if cmdType == cmdNameClearCommands:
+                        # The queue has been cleared for all but this one but we may need to
+                        # cleanup some state in this background loop so do that now
+                        self.cmdStatus       = cmdStatusDone
+                        driveRate            = 0.0
+                        rotateRate           = 0.0
                 else:
                     print "Invalid command of '%s'. No action taken" % (cmdType)
+
+            # Handle wait command and still allow it to be aborted by new message
+            # We could have a special abort the wait using a button in future if desired
+            if (self.waitTimeLeft > 0.0):
+                self.waitTimeLeft = self.waitTimeLeft - secPerLoop 
+                if (self.waitTimeLeft <= 0.0):
+                    self.publishStatus1Str(cmdType, "Waiting", "Done with waiting")
+                    self.cmdStatus       = cmdStatusDone   # allows next command to be read
 
             # Handle drive and rotate commands until they time out
             if (self.moveTimeLeft > 0.0):
@@ -508,7 +581,7 @@ class Follow:
             # Try to refind fiducial continuously if we see it or rotate to search.
             # We will only search for the fiducial if the search_for_target option is True
             elif (self.search_for_target == True) and (self.fid_in_view == False) \
-                 and (times_since_last_fid < self.max_lost_count):
+                and (times_since_last_fid < self.max_lost_count):
                 # Stop moving forward
                 linSpeed = 0
                 # Keep turning in the same direction
@@ -537,15 +610,58 @@ class Follow:
                 and (abs(linSpeed) < 0.01) and (abs(angSpeed) < 0.01):
                 # Here is logic to stop following if we think we are at the target
                 # and we see the target and action once found is set to stop following
+                fidDistanceX = self.fid_x 
+                fidRotationZ = self.fid_r 
                 if  (self.cmdStatus == cmdStatusInProgress) and \
                     (self.currentCommand == cmdNameFollowFiducial):
                    print "Arrived at following fiducial %s  actionOnDone %s comment %s\n" % \
                        (self.target_fiducial, self.actOnDone, self.cmd_comment)
-                   if (self.actOnDone != actOnDoneKeepFollowing):
+                   if (self.actOnDone == actOnDoneDriveOnTop) or (self.actOnDone == actOnDoneAssumePose):
+                       # Roughly Drive over the fiducial 
+                       print "fiducial %s  is %f meters away at angle of %s radians " % \
+                           (self.target_fiducial, fidDistanceX, fidRotationZ)
+                       self.publishStatus2Str(cmdType, "AtFiducial", self.target_fiducial, "Drive to over the Fiducial")
+                       twist = Twist()
+                       twist.angular.z = 0.0
+                       twist.linear.x  = 0.1   # a rather slow speed for accuracy of simple movement
+                       # using slow speed drive over the fiducial
+                       self.moveTimeLeft = fidDistanceX / twist.linear.x
+                       print "Drive over fiducial for %f sec" % (self.moveTimeLeft)
+                       while self.moveTimeLeft > 0.0:
+                           self.moveTimeLeft = self.moveTimeLeft - secPerLoop 
+                           self.cmdPub.publish(twist)
+                           rate.sleep()
+
+                       self.publishStatus2Str(cmdType, "AtFiducial", self.target_fiducial, "Drove to location of fiducial") 
+
+                       if self.actOnDone == actOnDoneAssumePose:
+                           # If assuming the pose then using slow speed rotate over the fiducial
+                           twist.linear.x  = 0.0
+                           twist.angular.z = 0.2     # a rather slow rotation
+                           if (fidRotationZ < 0.0):
+                               twist.angular.z = twist.angular.z * -1.0
+                           self.moveTimeLeft = abs(fidRotationZ / twist.angular.z)
+                           print "Rotate over fiducial for %f sec" % (self.moveTimeLeft)
+                           self.publishStatus2Str(cmdType, "AtFiducial", self.target_fiducial, "Rotate to pose of fiducial")
+                           while self.moveTimeLeft > 0.0:
+                               self.moveTimeLeft = self.moveTimeLeft - secPerLoop 
+                               self.cmdPub.publish(twist)
+                               rate.sleep()
+                           self.target_fiducial = self.null_fiducial
+                           self.fid_in_view = False
+                           self.publishStatus2Str(cmdType, "AtFiducial", self.target_fiducial, "Assumed pose of fiducial")
+                           self.cmdStatus = cmdStatusDone
+                       else:
+                           # This is the just drive on top and don't rotate situation
+                           self.cmdStatus = cmdStatusDone
+                           self.target_fiducial = self.null_fiducial
+                           self.fid_in_view = False
+
+                   elif (self.actOnDone != actOnDoneKeepFollowing):
                        self.cmdStatus = cmdStatusDone
                        self.target_fiducial = self.null_fiducial
                        self.fid_in_view = False
-                       self.publishStatus1Str(cmdType, "AtFiducial", "Proceeding to next command")
+                       self.publishStatus2Str(cmdType, "AtFiducial", self.target_fiducial, "Proceeding to next command")
 
             if self.debug_follow == True:
                 print "zero", zeroSpeed, self.suppressCmd
