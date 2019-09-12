@@ -5,11 +5,10 @@
 ## follow.py
 
 The fiducial_follow demo uses [aruco_detect](http://wiki.ros.org/aruco_detect)
-to detect fiducials in the image feed from a camera.  If the `target_fiducial`
-is detected, movement commands are issued to the robot to make it move towards
-the fiducial.
+to detect fiducials in the image feed from a camera.  Default usage will follow the`target_fiducial`
+when in view or search for it if not found like legacy version.  Movement commands are optionally issued to the script to allow it to follow a path of fiducials or do simple driving operations to re-position to next fiducial.
 
-A simple yet flexible interface has been added to greatly increase the possible usage of follow.py to do useful and programable on the fly following of pre placed fiducials on the floor or walls.
+An optional yet flexible interface has been added to greatly increase the possible usage of follow.py to do useful and programable on the fly following of pre placed fiducials on the floor or walls.
 There is an interface to follow.py that allows control using messages on topic /follower_commands which follow.py listens upon.  A list of fiducials for the robot to follow can be received up front or as the robot progresses.
 The status for completed commands comes out on topic /follower_status.  Included in the commands are simple movement commands that allow the robot to drive or turn which could be useful to find the next fiducial if it is out of view after the prior fiducial has been found.  This also allows use of different paths through floor based fiducials based on the directions in the commands to turn towards the next fiducial target.
 
@@ -19,8 +18,8 @@ The status for completed commands comes out on topic /follower_status.  Included
 * `target_fiducial`: the fiducial we are following. Use `none` to start idle. Default `fid_49`.
 * `min_dist`: the minimum distance in meters to consider it followed. Default `0.4`.
 * `max_dist`: the maximum distance in meters where we will try to follow. Default `4.5`.
-* `max_linear_rate`: the maximum approach speed we will use when following straight ahead in meters per sec. Default `1.0`.
-* `max_angular_rate`: the maximum rotation speed we will use when following and must turn in radians per sec. Default `1.2`.
+* `max_linear_rate`: the maximum approach speed used when following in meters per sec. Default `1.0`.
+* `max_angular_rate`: the maximum rotation speed used when following in radians per sec. Default `1.2`.
 * `search_for_target`: rotate to find the fiducial if it is not in view. Default `True`.
 * `lost_angular_rate`: angular rotation rate in radians per sec used in searching. Default `0.6`.
 * `drive_rate`: rate in meters per second for the simple drive commands.  Default `0.4`.
@@ -28,13 +27,13 @@ The status for completed commands comes out on topic /follower_status.  Included
 
 ### Publications
 
-* `cmd_vel`(geometry_msgs/Twist): commands to move the robot.
-* `follower_status`:(custom_msgs/FollowerStatus)
+* `cmd_vel` (geometry_msgs/Twist): commands to move the robot.
+* `follower_status` (custom_msgs/FollowerStatus): shows status as commands are received, started, and completed
 
 ### Subscriptions
 
-* `fiducial_transforms`:(fiducial_msgs/FiducialTransformArray)
-* `follower_Command`:(custom_msgs/FollowerCommand)
+* `fiducial_transforms` (fiducial_msgs/FiducialTransformArray): Listen for locations of observed fiducials
+* `follower_commands` (custom_msgs/FollowerCommand): Accept commands to process in order of reception
 
 ### Example usage for simple single fiducial following
 For the simple legacy fiducial follow mode a single aruco fiducial of size 140mm on edge of the black pattern that is number 49 is used.
