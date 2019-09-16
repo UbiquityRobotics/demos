@@ -46,6 +46,14 @@ Prepare such a fiducial and place it where the robot can see it with the camera 
 The follow.py script can act on commands sent to it using ros topic /follower_commands.
 These commands arrive in a general message, FollowerCommand, upon a well known topic of /follower_commands that is monitored by the follower script. 
 
+A powerful application of the following of a sequence of commands is to have the robot follow fiducials on the floor with a downward facing camera configured for your robot.  For optimal floor fiducial following there are some configuration changes suggested where the config files will be present starting from a path of /opt/ros/kinetic/share/raspicam_node for the case of ROS Kinetic.  Floor fiducials of 140mm size up to almost a 2 meters away have been recognized with success. 
+
+#### Optimal following of fiducials on the floor requires Config Changes
+The camera resolution should be increased to perhaps 1640x1232 so detection of fiducials from over a meter away is possible.  This allows greater spacing of fiducials on the floor.   Also it is best to turn off searching.
+* Camera config file must be formed and present, for this case it would be in camera_info/camerav2_1640x1232.yaml  The config file is best formed from a camera calibration done at the resolution, in this case 1640x1232.
+* A raspicam launch file must be present, for this case in launch/camerav2_1640x1232_10fps.launch
+* The launch file should specify argument 'search_for_target' as  'false'
+
 #### A very simple example client that issues and listens to status
 
 As an example we have a very simple example called follower_controller.py in the demos repository.
