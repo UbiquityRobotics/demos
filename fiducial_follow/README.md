@@ -41,20 +41,30 @@ Prepare such a fiducial and place it where the robot can see it with the camera 
 
     roslaunch magni_demos fiducial_follow.launch
 
-### Usage for following a sequence of fiducials and/or performing simple movements
+## Following fiducials On The Floor Using Commands
 
 The follow.py script can act on commands sent to it using ros topic /follower_commands.
 These commands arrive in a general message, FollowerCommand, upon a well known topic of /follower_commands that is monitored by the follower script. 
 
-The script can be issued a list of commands so the robot can follow a trail of fiducials on the floor.  For optimal floor fiducial following there are some configuration changes suggested where the config files will be present starting from a path of /opt/ros/kinetic/share/raspicam_node for the case of ROS Kinetic.  Floor fiducials of 140mm size up to almost a 2 meters away have been recognized with success. 
+The script can be issued a list of commands so the robot can follow a trail of fiducials on the floor.  For optimal floor fiducial following there are some configuration changes suggested where the config files will be present starting from a path of /opt/ros/kinetic/share/raspicam_node for the case of ROS Kinetic.  Floor fiducials of 100mm size are a better size for this mode of operation because they end up very close to the camera and we want the robot to drive over the fiducials generally. 
 
-#### Optimal following of fiducials on the floor requires Config Changes
-The camera resolution should be increased to perhaps 1640x1232 so detection of fiducials from over a meter away is possible.  This allows greater spacing of fiducials on the floor.   Also it is best to turn off searching.
+An example launch file that does some of the things needed can be run as follows.
+
+    roslaunch magni_demos fiducial_floor_follow.launch
+
+### The following of fiducials on the floor is intended after Config Changes
+The camera should be mounted in what we will call and release as the 'downward' mounting.
+We hope to support this on an image as soon as late 2019. Contact us on the forum if you need this earlier.
+An updated version of the magni.urdf.xacro file and modification of /etc/ubiquity/robot.yaml to specify raspicam position as downward would be required and ideally higher resolution raspicam config and launch files would be best.  We hope to support all of these things for floor fiducial following in our next raspberry Pi image perhaps as early as end of 2019.
+
+The camera resolution should be higher such as 1640x1232 so detection of fiducials from over a meter away is possible.  This allows greater spacing of fiducials on the floor.   Also it is best to turn off searching.
 * Camera config file must be formed and present, for this case it would be in camera_info/camerav2_1640x1232.yaml  The config file is best formed from a camera calibration done at the resolution, in this case 1640x1232.
 * A raspicam launch file must be present, for this case in launch/camerav2_1640x1232_10fps.launch
 * The launch file should specify argument 'search_for_target' as  'false'
+* The launch file can specify other argument suitable for other drive and rotate commands
 
-#### A very simple example client that issues and listens to status
+
+### A very simple example client that issues and listens to status
 
 As an example we have a very simple example called follower_controller.py in the demos repository.
 Take a look at this to see how to send commands and receive status.   This is also a nice starting point for your own simple node if you desire.
