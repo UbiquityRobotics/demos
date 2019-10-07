@@ -95,7 +95,7 @@ class Controller:
         cmdMsg.numParam1     = numParam1
         cmdMsg.comment       = comment
         self.followerCmdPub.publish(cmdMsg)
-        time.sleep(0.2)      # we have to wait a while between commands
+        time.sleep(0.8)      # we have to wait a while between commands
 
     """
     Called when a Tracker Command is received
@@ -131,22 +131,22 @@ class Controller:
 
         # First optionally configure parameters we want to be active for commands
         self.publishFollowerCommand("ClearCommands",   " ", " ", 0.0, "Clear all pending commands")
-        self.publishFollowerCommand("SetMaxLinRate",   " ", " ", 0.15, "Set max approach rate")
-        self.publishFollowerCommand("SetMaxAngRate",   " ", " ", 0.2, "Set max rotate to target rate")
-        self.publishFollowerCommand("SetDriveRate",    " ", " ", 0.1, "Set drive rate")
-        self.publishFollowerCommand("SetRotateRate",   " ", " ", 0.2, "Set rotate rate")
+        #self.publishFollowerCommand("SetMaxLinearRate", " ", " ", 1.0, "Set max linear approach rate")
+        self.publishFollowerCommand("SetDriveRate",    " ", " ", 0.2, "Set drive rate")
+        self.publishFollowerCommand("SetRotateRate",   " ", " ", 0.3, "Set rotate rate")
         self.publishFollowerCommand("WaitInSeconds",   " ", " ", 2.0, "Wait a few sec ")
 
         # Next we show how to follow a few fiducials on the floor
-        #self.publishFollowerCommand("FollowFiducial",  "DriveOnTop", "fid101", 0.0, "Follow this fiducial")
-        self.publishFollowerCommand("FollowFiducial",  "DoNextCommand", "fid102", 0.0, "Follow this fiducial")
-        self.publishFollowerCommand("FollowFiducial",  "DoNextCommand", "fid103", 0.0, "Follow fiducial and match pose")
-        #self.publishFollowerCommand("FollowFiducial",  "AssumePose", "fid103", 0.0, "Follow fiducial and match pose")
-        #self.publishFollowerCommand("FollowFiducial", "KeepFollowing", "fid104", 0.0, "Keep Follow fiducial 3")
         self.publishFollowerCommand("DriveForward",    " ", " ", 2.0, "Drive forward 2 sec at DriveRate")
         self.publishFollowerCommand("RotateRight",     " ", " ", 1.0, "Rotate right 1 sec at RotateRate")
         self.publishFollowerCommand("RotateLeft",      " ", " ", 2.0, "Rotate left  2 sec at RotateRate")
         self.publishFollowerCommand("RotateRight",     " ", " ", 1.0, "Rotate right 1 sec at RotateRate")
+        #self.publishFollowerCommand("FollowFiducial",  "DriveOnTop", "fid101", 0.0, "Follow this fiducial")
+        self.publishFollowerCommand("FollowFiducial",  "DoNextCommand", "fid102", 0.0, "Follow this fiducial")
+        self.publishFollowerCommand("FollowFiducial",  "DriveOnTop", "fid102", 0.0, "Follow this fiducial")
+        self.publishFollowerCommand("FollowFiducial",  "DoNextCommand", "fid103", 0.0, "Follow fiducial and match pose")
+        #self.publishFollowerCommand("FollowFiducial",  "AssumePose", "fid103", 0.0, "Follow fiducial and match pose")
+        #self.publishFollowerCommand("FollowFiducial", "KeepFollowing", "fid104", 0.0, "Keep Follow fiducial 3")
 
         print "Commands sent "
 

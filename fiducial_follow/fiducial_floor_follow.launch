@@ -8,7 +8,7 @@
    It is like fiducial_follow.launch but is setup to support following floor fiducials
    A higher camera resolution is used and some options new as of late 2019 added
 
-   Be sure to set the fiducial_len and target_fiducial and search_for_target for your own usage
+   Be sure to set the fiducial_len and target_fiducial and target_search for your own usage
 -->
 <launch>
     <!-- We feel a 0.1 meter fiducial is best for floor following -->
@@ -17,17 +17,20 @@
     <arg name="target_fiducial" default="fid101"/>
 
     <!-- Turn off the auto-search for fiducial missing from view  -->
-    <arg name="search_for_target" default="false"/>
+    <arg name="target_search" value="0"/>
 
     <!-- Minimal debug is when debug_follow is 1  -->
     <param name="debug_follow" value="2" />
 
     <!-- Get closer to fiducials on floor and set new drive and rotate rates -->
+    <arg name="drive_rate" default="0.15"/>
+    <arg name="rotate_rate" default="0.5"/>
     <arg name="min_dist" default="0.4"/>
-    <arg name="linear_rate" default="0.3"/>
-    <arg name="angular_rate" default="0.7"/>
-    <arg name="drive_rate" default="0.1"/>
-    <arg name="rotate_rate" default="0.2"/>
+    <arg name="max_dist" default="3.0"/>
+    <arg name="linear_rate" default="0.5"/>
+    <arg name="max_linear_rate" default="0.8"/>
+    <arg name="angular_rate" default="0.4"/>
+    <arg name="max_angular_rate" default="0.6"/>
 
     <!-- Use higher resolution camera so fiducials are easier to see on the floor         -->
     <!-- This is not available on the June 2019 Raspberry Pi  image                       -->
@@ -60,8 +63,14 @@
     <!-- Launch the actual follow node -->
     <node name="fiducial_follow" pkg="fiducial_follow" type="follow.py" output="screen">
         <param name="target_fiducial" value="$(arg target_fiducial)"/>
-        <param name="search_for_target" value="$(arg search_for_target)"/>
+        <param name="target_search" value="$(arg target_search)"/>
         <param name="drive_rate" value="$(arg drive_rate)"/>
         <param name="rotate_rate" value="$(arg rotate_rate)"/>
+        <param name="min_dist" value="$(arg min_dist)"/>
+        <param name="max_dist" value="$(arg max_dist)"/>
+        <param name="linear_rate" value="$(arg linear_rate)"/>
+        <param name="max_linear_rate" value="$(arg max_linear_rate)"/>
+        <param name="angular_rate" value="$(arg angular_rate)"/>
+        <param name="max_angular_rate" value="$(arg max_angular_rate)"/>
     </node>
 </launch>

@@ -120,15 +120,11 @@ class Follow:
        # these were on in legacy version but can be disabled using parameter below
        # 1 is less verbose and 2 more verbose with 0 almost no messages
        self.debug_follow  = rospy.get_param("~debug_follow", 1)
-       self.debug_verbose = rospy.get_param("~debug_verbose", False)
+       self.debug_verbose = rospy.get_param("~debug_verbose", 0)
 
-       # Set to 'true' for Legacy follower where we search for the sole fiducial if it goes out of sight
+       # Set to 1 for Legacy follower where we search for the sole fiducial if it goes out of sight
        # to operate in the mode where commands are used via topic this should be false
-       searchOption = rospy.get_param("~search_for_target", "false")
-       if searchOption == "true":
-           self.search_for_target = True 
-       else:
-           self.search_for_target = False 
+       self.target_search = rospy.get_param("~target_search", 1)
 
        # ---------------------- start of keywords for use in commands ---------------------------
 
@@ -147,16 +143,18 @@ class Follow:
        # a drive rate used for simple drive commands
        # we may choose to include this in the drive commands someday
        self.drive_rate = rospy.get_param("~drive_rate", 0.4)
+       self.drive_speed = 0.0
 
        # a rotate rate used for simple rotate commands
        # we may choose to include this in the drive commands someday
        self.rotate_rate = rospy.get_param("~rotate_rate", 0.6)
+       self.rotate_speed = 0.0
 
        # Minimum distance we want the robot to be from the fiducial
-       self.min_dist = rospy.get_param("~min_dist", 0.4)
+       self.min_dist = rospy.get_param("~min_dist", 0.6)
 
        # Maximum distance a fiducial can be away for us to attempt to follow
-       self.max_dist = rospy.get_param("~max_dist", 4.5)
+       self.max_dist = rospy.get_param("~max_dist", 2.5)
 
        # Proportion of angular error to use as angular velocity
        self.angular_rate = rospy.get_param("~angular_rate", 2.0)
@@ -171,7 +169,7 @@ class Follow:
        self.linear_rate = rospy.get_param("~linear_rate", 1.2)
 
        # Maximum linear speed (meters/second)
-       self.max_linear_rate = rospy.get_param("~max_linear_rate", 1.0)
+       self.max_linear_rate = rospy.get_param("~max_linear_rate", 1.5)
 
        # Linear speed decay (meters/second)
        self.linear_decay = rospy.get_param("~linear_decay", 0.9)
@@ -262,7 +260,7 @@ class Follow:
             roll = 0.0
             pitch = 0.0
             yaw = 0.0
-            if self.debug_verbose == True:
+            if self.debug_verbose > 0 :
                 self.tfDbgBuffer.set_transform(t, "follow")
                 tfd = self.tfDbgBuffer.lookup_transform("base_link", t.child_frame_id, imageTime)
                 ctd = tfd.transform.translation
@@ -286,6 +284,7 @@ class Follow:
         if not found:
             if self.debug_follow > 1:
                 print "Fiducial %s NOT found." % (self.target_fiducial)
+            self.fid_in_view = False
             return # Exit this function now, we don't see the fiducial
         try:
             # Get the fiducial position relative to the robot center, instead of the camera
@@ -296,7 +295,7 @@ class Follow:
             (roll, pitch, yaw) = euler_from_quaternion(quat)
             print "T_fidBase %lf %lf %lf %lf %lf %lf %lf\n" % \
                              (ct.x, ct.y, ct.z, cr.x, cr.y, cr.z, cr.w)
-            if self.debug_verbose == True
+            if self.debug_verbose > 0 :
                 print "T_fidBase euler for fid %d roll %lf  pitch %lf  Z rot (yaw) %lf \n" % (id, roll, pitch, yaw)
 
             # Set the state varibles to the position and rotation of the fiducial
@@ -341,28 +340,28 @@ class Follow:
             # Drive straight for the specified time in seconds of numParam1 at the current drive_rate
             self.target_fiducial = self.null_fiducial
             self.moveTimeLeft    = numParam1                  # set the duration of this movement
-            driveRate            = self.drive_rate            # set the rate for this movement
+            self.drive_speed     = self.drive_rate            # set the speed for this movement
             self.publishStatus1StrAndValue(cmdType, "Driving", "Drive time in seconds of ", numParam1)
 
         elif cmdType == cmdNameDriveReverse:
             # Drive in reverse for the specified time in seconds of numParam1 at the current drive_rate
             self.target_fiducial = self.null_fiducial
             self.moveTimeLeft    = numParam1                  # set the duration of this movement
-            driveRate            = self.drive_rate * (-1.0)   # set the rate for this movement
+            self.drive_speed     = self.drive_rate * (-1.0)   # set the speed for this movement
             self.publishStatus1StrAndValue(cmdType, "Driving", "Drive time in seconds of ", numParam1)
 
         elif cmdType == cmdNameRotateLeft:
             # Rotate left for the specified time in seconds of numParam1 at the current rotate_rate
             self.target_fiducial = self.null_fiducial
             self.moveTimeLeft    = numParam1                  # set the duration of this movement
-            rotateRate           = self.rotate_rate           # set the rate for this movement
+            self.rotate_speed    = self.rotate_rate           # set the rate for this movement
             self.publishStatus1StrAndValue(cmdType, "RotatingLeft", "Rotate time in seconds of ", numParam1)
 
         elif cmdType == cmdNameRotateRight:
             # Rotate right for the specified time in seconds of numParam1 at the current rotate_rate
             self.target_fiducial = self.null_fiducial
             self.moveTimeLeft    = numParam1                  # set the duration of this movement
-            rotateRate           = self.rotate_rate * (-1.0)  # set the rate for this movement
+            self.rotate_speed    = self.rotate_rate * (-1.0)  # set the rate for this movement
             self.publishStatus1StrAndValue(cmdType, "RotatingRight", "Rotate time in seconds of ", numParam1)
 
         elif cmdType == cmdNameClearCommands:
@@ -453,7 +452,7 @@ class Follow:
         # Setup the variables that we will use later
         linSpeed = 0.0
         angSpeed = 0.0
-        times_since_last_fid = 0
+        loops_since_fid_last_seen = 0
 
         cmdType    = 0
         cmdParam1  = 0
@@ -461,9 +460,11 @@ class Follow:
         cmdString1 = "none"
 
         # these values control drive and rotate speeds while a movement command is active
-        driveRate  = 0.0
-        rotateRate = 0.0
+        self.drive_speed  = 0.0
+        self.rotate_speed = 0.0
 
+        print "Fiducial follow starting with fid %s and search %d debug %d" % \
+            (self.target_fiducial, self.target_search, self.debug_follow)
         self.publishStatus1Str("ProgramStatus", "Starting", " ")
 
         # While our node is running
@@ -492,8 +493,8 @@ class Follow:
                         # The queue has been cleared for all but this one but we may need to
                         # cleanup some state in this background loop so do that now
                         self.cmdStatus       = cmdStatusDone
-                        driveRate            = 0.0
-                        rotateRate           = 0.0
+                        self.drive_speed     = 0.0
+                        self.rotate_speed    = 0.0
                 else:
                     print "Invalid command of '%s'. No action taken" % (cmdType)
 
@@ -507,25 +508,32 @@ class Follow:
 
             # Handle drive and rotate commands until they time out
             if (self.moveTimeLeft > 0.0):
+                driveSpeed  = self.drive_speed
+                rotateSpeed = self.rotate_speed
+                print "Move in progress for cmd %s. driveSpeed %f rotateSpeed %f with %f sec left" % \
+                    (cmdType, driveSpeed, rotateSpeed, self.moveTimeLeft)
                 self.moveTimeLeft = self.moveTimeLeft - secPerLoop 
                 twist = Twist()
                 twist.angular.z = 0.0
                 twist.linear.x  = 0.0
                 if (self.cmdStatus == cmdStatusInProgress) and (self.moveTimeLeft > 0.0):
                     if (cmdType == cmdNameDriveForward) or (cmdType == cmdNameDriveReverse): 
-                        twist.linear.x   = driveRate
+                        twist.linear.x   = driveSpeed
                     if (cmdType == cmdNameRotateLeft) or (cmdType == cmdNameRotateRight):
-                        twist.angular.z  = rotateRate
+                        twist.angular.z  = rotateSpeed
                 else:
                     if (cmdType == cmdNameDriveForward) or (cmdType == cmdNameDriveReverse): 
                         self.publishStatus1Str(cmdType, "Done", "Driving completed")
                     elif (cmdType == cmdNameRotateLeft) or (cmdType == cmdNameRotateRight):
                         self.publishStatus1Str(cmdType, "Done", "Rotation completed")
                     self.cmdStatus       = cmdStatusDone
-                    driveRate            = 0.0
-                    rotateRate           = 0.0
+                    driveSpeed            = 0.0
+                    rotateSpeed           = 0.0
 
                 self.cmdPub.publish(twist)
+
+                rate.sleep()
+                continue
 
             # if we do not have a fiducial to track we do the pause and skip follow logic
             if self.target_fiducial == self.null_fiducial:
@@ -545,21 +553,25 @@ class Follow:
             # atan2 works for any point on a circle (as opposed to atan)
             angular_error = math.atan2(self.fid_y, self.fid_x)
 
-            if self.debug_follow > 0:
-                print "DistToFid: %f Errors: forward %f lateral %f angular %f" % \
-                    (self.fid_x, forward_error, lateral_error, degrees(angular_error))
-
             if self.fid_in_view:
-                times_since_last_fid = 0
+                loops_since_fid_last_seen = 0
             else:
-                times_since_last_fid += 1
+                loops_since_fid_last_seen += 1
 
+            if self.debug_follow > 0 and (loops_since_fid_last_seen % 10) == 0:
+                print "Fid: %s Dist %f in_view %d search %d missing count %d Errors: forward %f lateral %f angular %f" % \
+                    (self.target_fiducial, self.fid_x, self.fid_in_view, self.target_search, loops_since_fid_last_seen, \
+                    forward_error, lateral_error, degrees(angular_error))
+
+            # Decide on movement required from observations with or without fiducial being seen
             if forward_error > self.max_dist:
                 print "Fiducial is too far away"
                 linSpeed = 0
                 angSpeed = 0
-            # A fiducial was detected since last iteration of this loop
+
             elif self.fid_in_view:
+                # A fiducial was detected since last iteration of this loop
+
                 # Set the turning speed based on the angular error
                 # Add some damping based on the previous speed to smooth the motion 
                 #angSpeed = (angular_error * self.angular_rate) - (angSpeed / 2.0)
@@ -581,29 +593,32 @@ class Follow:
                 if self.debug_follow > 0:
                     print "DistMovement: linSpeed %f angSpeed %f"  % (linSpeed, angSpeed)
 
-            # Hysteresis, don't immediately stop if the fiducial is lost
-            elif not self.fid_in_view and times_since_last_fid < self.hysteresis_count:
-                # Decrease the speed (assuming linear decay is <1)
-                linSpeed *= self.linear_decay
-
-            # Try to refind fiducial continuously if we see it or rotate to search.
-            # We will only search for the fiducial if the search_for_target option is True
-            elif (self.search_for_target == True) and (self.fid_in_view == False) \
-                and (times_since_last_fid < self.max_lost_count):
-                # Stop moving forward
-                linSpeed = 0
-                # Keep turning in the same direction
-                if angSpeed < 0:
-                    angSpeed = -self.lost_angular_rate
-                elif angSpeed > 0:
-                    angSpeed = self.lost_angular_rate
-                else:
-                    angSpeed = 0
-                print "Try keep rotating to refind fiducial %s try# %d" % (self.target_fiducial, times_since_last_fid)
             else:
-                # go to zero movement 
-                angSpeed = 0
-                linSpeed = 0
+                # A fiducial was NOT detected since last iteration of this loop
+
+                if loops_since_fid_last_seen < self.hysteresis_count:
+                    # Hysteresis, don't immediately stop if the fiducial is lost
+                    # Decrease the speed (assuming linear decay is <1)
+                    linSpeed *= self.linear_decay
+
+                # Try to refind fiducial continuously if we see it or rotate to search.
+                # We will only search for the fiducial if the target_search option is nonzero
+                elif self.target_search > 0 and loops_since_fid_last_seen < self.max_lost_count:
+                    # Stop moving forward
+                    linSpeed = 0
+                    # Keep turning in the same direction
+                    if angSpeed < 0:
+                        angSpeed = -self.lost_angular_rate
+                    elif angSpeed > 0:
+                        angSpeed = self.lost_angular_rate
+                    else:
+                        angSpeed = 0
+                    print "Try keep rotating to refind fiducial %s try# %d" % (self.target_fiducial, loops_since_fid_last_seen)
+
+                else:
+                    # go to zero movement 
+                    angSpeed = 0
+                    linSpeed = 0
 
             if self.debug_follow > 1:
                 print "Speeds: linear %f angular %f" % (linSpeed, angSpeed)
