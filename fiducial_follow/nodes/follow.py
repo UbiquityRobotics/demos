@@ -86,7 +86,7 @@ class Follow:
        self.commandQueue = []
 
        # Set the rate the main loop will run at
-       self.loop_hz = 30
+       self.loop_hz = 25
 
        # Set up a transform listener so we can lookup transforms in the past
        self.tfBuffer = tf2_ros.Buffer(rospy.Time(30))
@@ -120,7 +120,7 @@ class Follow:
        # these were on in legacy version but can be disabled using parameter below
        # 1 is less verbose and 2 more verbose with 0 almost no messages
        self.debug_follow  = rospy.get_param("~debug_follow", 1)
-       self.debug_verbose = rospy.get_param("~debug_verbose", 0)
+       self.debug_verbose = rospy.get_param("~debug_verbose", 1)
 
        # Set to 1 for Legacy follower where we search for the sole fiducial if it goes out of sight
        # to operate in the mode where commands are used via topic this should be false
@@ -198,7 +198,7 @@ class Follow:
        self.fid_x = self.min_dist
        self.fid_y = 0
        self.fid_r = 0
-       self.fid_in_view = False
+       self.fid_in_view = 0
        # ------------------------------------------------------------------
 
     def publishStatus1Str(self, cmdType, statusState, string1):
@@ -267,9 +267,10 @@ class Follow:
                 crd = tfd.transform.rotation
                 print "T_fidBase Quat for fid %d %lf %lf %lf %lf %lf %lf %lf\n" % \
                              (id, ctd.x, ctd.y, ctd.z, crd.x, crd.y, crd.z, crd.w)
-                quat = (crd.x, crd.y, crd.z, crd.w)
-                (roll, pitch, yaw) = euler_from_quaternion(quat)
-                print "T_fidBase euler for fid %d roll %lf  pitch %lf  yaw (z rot) %lf \n" % (id, roll, pitch, yaw)
+                if self.debug_verbose > 1 :
+                    quat = (crd.x, crd.y, crd.z, crd.w)
+                    (roll, pitch, yaw) = euler_from_quaternion(quat)
+                    print "T_fidBase euler for fid %d roll %lf  pitch %lf  yaw (z rot) %lf \n" % (id, roll, pitch, yaw)
 
 
             if t.child_frame_id == self.target_fiducial:
@@ -277,14 +278,15 @@ class Follow:
                     print "Fiducial %s found in transforms." % (self.target_fiducial)
                 # We found the fiducial we are looking for
                 found = True
+                # self.fid_in_view = True
 
                 # Add the transform of the fiducial to our buffer
                 self.tfBuffer.set_transform(t, "follow")
 
         if not found:
-            if self.debug_follow > 1:
+            if self.debug_follow > 0:
                 print "Fiducial %s NOT found." % (self.target_fiducial)
-            self.fid_in_view = False
+            self.fid_in_view = 0
             return # Exit this function now, we don't see the fiducial
         try:
             # Get the fiducial position relative to the robot center, instead of the camera
@@ -302,7 +304,7 @@ class Follow:
             self.fid_x = ct.x
             self.fid_y = ct.y
             self.fid_r = yaw
-            self.fid_in_view = True
+            self.fid_in_view = 1
 
         except:
             traceback.print_exc()
@@ -326,7 +328,7 @@ class Follow:
             # set new fiducial to follow with required end action once we have tracked it
             self.target_fiducial = strParam1
             self.actOnDone       = actOnDone      # required parameter for a follow
-            self.fid_in_view     = False          # force at least one target acquisition
+            self.fid_in_view     = 0              # force at least one target acquisition
             self.publishStatus1Str(cmdType, "SetNewFiducial", self.target_fiducial)
 
         elif cmdType == cmdNameWaitInSeconds:
@@ -445,7 +447,7 @@ class Follow:
     Main loop
     """
     def run(self):
-        # setup for looping at 20hz
+        # setup for looping at 25hz
         rate = rospy.Rate(self.loop_hz)
         secPerLoop = 1.0 / self.loop_hz
 
@@ -463,8 +465,8 @@ class Follow:
         self.drive_speed  = 0.0
         self.rotate_speed = 0.0
 
-        print "Fiducial follow starting with fid %s and search %d debug %d" % \
-            (self.target_fiducial, self.target_search, self.debug_follow)
+        print "Fiducial follow starting with fid %s and search %d looprate %d debug %d" % \
+            (self.target_fiducial, self.target_search, self.loop_hz, self.debug_follow)
         self.publishStatus1Str("ProgramStatus", "Starting", " ")
 
         # While our node is running
@@ -538,7 +540,7 @@ class Follow:
             # if we do not have a fiducial to track we do the pause and skip follow logic
             if self.target_fiducial == self.null_fiducial:
                 print "IDLE: No fiducial to follow. " 
-                self.fid_in_view = False
+                self.fid_in_view = 0
                 rate.sleep()
                 continue
 
@@ -553,7 +555,7 @@ class Follow:
             # atan2 works for any point on a circle (as opposed to atan)
             angular_error = math.atan2(self.fid_y, self.fid_x)
 
-            if self.fid_in_view:
+            if self.fid_in_view == 1:
                 loops_since_fid_last_seen = 0
             else:
                 loops_since_fid_last_seen += 1
@@ -569,7 +571,7 @@ class Follow:
                 linSpeed = 0
                 angSpeed = 0
 
-            elif self.fid_in_view:
+            elif self.fid_in_view == 1:
                 # A fiducial was detected since last iteration of this loop
 
                 # Set the turning speed based on the angular error
@@ -629,7 +631,7 @@ class Follow:
             if not zeroSpeed:
                 self.suppressCmd = False
 
-            if (self.fid_in_view == True) and (forward_error <= (self.min_dist * 1.005)) \
+            if (self.fid_in_view == 1) and (forward_error <= (self.min_dist * 1.005)) \
                 and (abs(linSpeed) < 0.01) and (abs(angSpeed) < 0.01):
                 # Here is logic to stop following if we think we are at the target
                 # and we see the target and action once found is set to stop following
@@ -671,19 +673,19 @@ class Follow:
                                self.cmdPub.publish(twist)
                                rate.sleep()
                            self.target_fiducial = self.null_fiducial
-                           self.fid_in_view = False
+                           self.fid_in_view = 0
                            self.publishStatus2Str(cmdType, "AtFiducial", self.target_fiducial, "Assumed pose of fiducial")
                            self.cmdStatus = cmdStatusDone
                        else:
                            # This is the just drive on top and don't rotate situation
                            self.cmdStatus = cmdStatusDone
                            self.target_fiducial = self.null_fiducial
-                           self.fid_in_view = False
+                           self.fid_in_view = 0
 
                    elif (self.actOnDone != actOnDoneKeepFollowing):
                        self.cmdStatus = cmdStatusDone
                        self.target_fiducial = self.null_fiducial
-                       self.fid_in_view = False
+                       self.fid_in_view = 0
                        self.publishStatus2Str(cmdType, "AtFiducial", self.target_fiducial, "Proceeding to next command")
 
             if self.debug_follow > 1:
@@ -697,7 +699,7 @@ class Follow:
                     self.suppressCmd = True
 
             # We already acted on the current fiducial
-            self.fid_in_view = False
+            # self.fid_in_view = 0
             rate.sleep()
 
 
