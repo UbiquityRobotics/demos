@@ -5,11 +5,12 @@
 ## follow.py
 
 The fiducial_follow demo uses [aruco_detect](http://wiki.ros.org/aruco_detect)
-to detect fiducials in the image feed from a camera.  Default usage will follow the`target_fiducial`
-when in view or search for it if not found like legacy version.  Movement commands are optionally issued to the script to allow it to follow a path of fiducials or do simple driving operations to re-position to next fiducial.
+to detect fiducials in the image feed from a camera.  Default usage will follow the default #49 `target_fiducial`. When the `target_fiducial` is in view or search for it if not found which was the only mode of the original version of fiducial follow demo. 
 
-An optional yet flexible interface has been added to greatly increase the possible usage of follow.py to do useful and programable on the fly following of pre placed fiducials on the floor or walls.
-There is an interface to follow.py that allows control using messages on topic /follower_commands which follow.py listens upon.  A list of fiducials for the robot to follow can be received up front or as the robot progresses.
+An optional yet flexible interface has been added to greatly increase the possible usage of follow.py to respond to commands on an inbound ros topic and issue status on a second topic.  The new mode allows for programable on the fly following of pre placed fiducials on the floor or walls as well as very simple movement commands that may be required to keep the next fiducial in view prior to going to that fiducial.
+This new mode is an alternative to our full room navigation methods which are in general more complex but also far more exact in navigation of a work space that uses ceiling fiducial map. 
+
+There is an interface to follow.py that allows control using messages on topic `/follower_commands`.  A list of messages can include new setup parameters as well as fiducials for the robot to follow or act upon. These commands can be queued in the follow.py app or can be received as the robot progresses and the user app detects status that then requires a new command to be issued to the robot. 
 The status for completed commands comes out on topic /follower_status.  Included in the commands are simple movement commands that allow the robot to drive or turn which could be useful to find the next fiducial if it is out of view after the prior fiducial has been found.  This also allows use of different paths through floor based fiducials based on the directions in the commands to turn towards the next fiducial target.
 
 
@@ -54,14 +55,16 @@ An example launch file that does some of the things needed can be run as follows
 
 ### The following of fiducials on the floor is intended after Config Changes
 The camera should be mounted in what we will call and release as the 'downward' mounting.
-We hope to support this on an image as soon as late 2019. Contact us on the forum if you need this earlier.
-An updated version of the magni.urdf.xacro file and modification of /etc/ubiquity/robot.yaml to specify raspicam position as downward would be required and ideally higher resolution raspicam config and launch files would be best.  We hope to support all of these things for floor fiducial following in our next raspberry Pi image perhaps as early as end of 2019.
+We hope to support this on an image as soon as early 2020. Contact us on the forum if you need this earlier.
 
-The camera resolution should be higher such as 1640x1232 so detection of fiducials from over a meter away is possible.  This allows greater spacing of fiducials on the floor.   Also it is best to turn off searching.
-* Camera config file must be formed and present, for this case it would be in camera_info/camerav2_1640x1232.yaml  The config file is best formed from a camera calibration done at the resolution, in this case 1640x1232.
-* A raspicam launch file must be present, for this case in launch/camerav2_1640x1232_10fps.launch
+An updated version of the magni.urdf.xacro file and modification of /etc/ubiquity/robot.yaml to specify raspicam pose as `downward` would be required and ideally higher resolution raspicam config and launch files would be best.  We hope to support all of these things for floor fiducial following in our next raspberry Pi image perhaps early in 2020.
+
+The camera resolution set in our launch for this mode will be high such as 1280x920 so detection of fiducials at large angles seen from the robot from over a meter away are possible.  
+
+* Camera config file must be formed and present, for this case it would be in camera_info/camerav2_1280x960.yaml  
+* A raspicam launch file must be present where we will initially use launch/camerav2_1280x960_10fps.launch
 * The launch file should specify argument 'search_for_target' as  'false'
-* The launch file can specify other argument suitable for other drive and rotate commands
+* The launch file can specify other argument suitable for other drive and rotate needs.
 
 
 ### A very simple example client that issues and listens to status
@@ -69,7 +72,7 @@ The camera resolution should be higher such as 1640x1232 so detection of fiducia
 As an example we have a very simple example called follower_controller.py in the demos repository.
 Take a look at this to see how to send commands and receive status.   This is also a nice starting point for your own simple node if you desire.
 Modify the script perhaps first to just drive a little then print and place your own fiducials and have it follow them in some order you define.
-Keep in mind that the basic rotate may have to be used to point the robot in the general direction of the next fiducial.
+Keep in mind that the basic rotate and perhaps the basic drive commands may have to be used after ariving at one fiducial in order to point the robot in the general direction where it can see the next fiducial.
 You would first run the fiducial_follow node and then the command below would start this sample client node
 
     python ./follower_controller.py 
