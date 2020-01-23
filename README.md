@@ -1,5 +1,5 @@
 
-# Ubuquity Robotics Demos
+# Ubiquity Robotics Demos
 
 This repository contains the following demos:
 
