@@ -69,13 +69,13 @@ The camera resolution set in our launch for this mode will be high such as 1280x
 
 ### A very simple example client that issues and listens to status
 
-As an example we have a very simple example called follower_controller.py in the demos repository.
-Take a look at this to see how to send commands and receive status.   This is also a nice starting point for your own simple node if you desire.
+As an example we have a very simple example called follower_client.py in the scripts folder.
+Take a look at this to see how to send commands and receive status.   This is simple starting point for your own node if you desire.
 Modify the script perhaps first to just drive a little then print and place your own fiducials and have it follow them in some order you define.
 Keep in mind that the basic rotate and perhaps the basic drive commands may have to be used after ariving at one fiducial in order to point the robot in the general direction where it can see the next fiducial.
 You would first run the fiducial_follow node and then the command below would start this sample client node
 
-    python ./follower_controller.py 
+    python ./follower_client.py 
 
 #### The general purpose command message
 
