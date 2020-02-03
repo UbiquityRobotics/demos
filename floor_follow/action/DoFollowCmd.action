@@ -1,0 +1,16 @@
+# Define the goal for this command
+uint32  commandType
+uint32  actionOnDone
+float64 numParam1
+float64 numParam2
+string  strParam1 
+string  comment
+
+---
+# define the result
+uint32  commandResult
+---
+# define a status
+uint32  commandState
+uint32  statusBits
+float32 percent_complete
