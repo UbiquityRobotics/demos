@@ -35,7 +35,7 @@ roslib.load_manifest('floor_follow')
 import rospy
 import actionlib
 import actionlib_msgs
-from floor_follow import DoFollowCmdAction
+from follow_actions.msg import DoFollowCmdAction
 
 # our custom messages for the commands we will follow
 from custom_messages.msg import FollowerCommand, FollowerStatus
@@ -65,7 +65,6 @@ class DoFloorFollowServer:
     """
     def __init__(self):
 
-       print "DEBUG: INIT NODE \n"
        self.commandQueue = []
 
        # Set the rate the main loop will run at
@@ -90,8 +89,6 @@ class DoFloorFollowServer:
        self.waitTimeLeft = 0.0
 
        # ---------------------- start of keywords for use in commands ---------------------------
-
-       print "DEBUG: INIT PARAMS \n"
 
        # define a fiducial that when set implies we are not seeking any fiducial
        self.null_fiducial = "fidnone"
@@ -119,7 +116,7 @@ class DoFloorFollowServer:
 
        # default action we will use once we actually find and have approached the fiducial
        # The awaitNextCommand action will continue to follow until a new command comes in
-       self.actOnDone = FF_ONDONE_DO_NEXT_COMMAND
+       self.actOnDone = 11  # HOW TO GET FROM .action file??? DoFollowCmdAction._action_goal.FF_ONDONE_DO_NEXT_COMMAND
 
        # We need a state to indicate for the current command so we define 'InProgress' and 'Done'
        # When cmdStatus is InProgress we do not read new command except state control commands
@@ -185,9 +182,9 @@ class DoFloorFollowServer:
        self.fid_in_view = 0
        # ------------------------------------------------------------------
 
-       print "DEBUG: INIT ActionLib Server \n"
-       self.server = actionlib.SimpleActionServer('do_floor_follow', DoFollowCmdAction, self.execute, False)
-       print "DEBUG: INIT START server \n"
+       self.server = actionlib.SimpleActionServer('do_floor_follow', DoFollowCmdAction, self.run, False)
+
+       print "INIT START actionlib server \n"
        self.server.start()
 
     def publishStatus1Str(self, cmdType, statusState, string1):
@@ -700,6 +697,5 @@ if __name__ == "__main__":
     rospy.init_node('floor_follow')
 
     # Create an instance of our follow class
-    print "DEBUG: INSTANTIATE action server \n"
     server = DoFloorFollowServer()
     rospy.spin()
