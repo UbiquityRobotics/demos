@@ -43,7 +43,30 @@ import traceback
 import math
 import time
 import actionlib
+import numpy
 
+from follow_actions.msg import DoFollowCmdAction, DoFollowCmdGoal
+
+# Get these from a common include would be best
+FF_CMD_CLEAR_COMMANDS=1       # Clear all commands (good idea on start of activities)
+FF_CMD_WAIT_IN_SECONDS=2      # stop execution of commands for this delay in seconds
+FF_CMD_CLEAR_IN_PROGRESS=9    # Clear queue special internal command
+
+FF_CMD_FOLLOW_FIDUCIAL=101    # Approach a fiducial up to a preset distance
+FF_CMD_STOP_MOVEMENT=102
+FF_CMD_DRIVE_FORWARD=103      # Drive forward for the specified time at the current drive_rate
+FF_CMD_DRIVE_REVERSE=104      # Drive reverse for the specified time at the current drive_rate
+FF_CMD_ROTATE_LEFT=105        # Rotate left   for the specified time at the current rotate_rate
+FF_CMD_ROTATE_RIGHT=106       # Rotate right  for the specified time at the current rotate_rate
+FF_CMD_SET_DRIVE_RATE=201     # Set drive_rate in M/sec for next drive command
+FF_CMD_SET_ROTATE_RATE=202    # Set the rotation rate for rotate commands in Rad/Sec
+FF_CMD_SET_MAX_LIN_RATE=203   # Set maximum linear rate in M/Sec used to approach the target fiducial
+FF_CMD_SET_MAX_ANG_RATE=204   # Set maximum angular rate in Rad/Sec used to rotate towards the target fiducial
+
+# Actions to take on command done
+FF_ONDONE_DO_NEXT_COMMAND=11  # Default is to go on to next command in the queue
+FF_ONDONE_ASSUME_POSE=12      # Once the fiducial is approached drive on top and rotate to pose of fiducial
+FF_ONDONE_DRIVE_ON_TOP=13     # Drive on top of the fiducial
 
 class Controller:
     """
@@ -64,6 +87,27 @@ class Controller:
 
        # define a fiducial that when set implies we are not seeking any fiducial
        self.null_fiducial = "fidnone"
+
+       # ActionLib server setup 
+       print "Setup connection to floor_follow server" 
+       client = actionlib.SimpleActionClient('do_floor_follow', DoFollowCmdAction)
+       print "Wait for floor_follow server" 
+       client.wait_for_server()
+       print "Connection to floor_follow server established" 
+
+       # DEBUG !!! Do a test message
+       goal = DoFollowCmdGoal()
+       goal.commandType  = FF_CMD_STOP_MOVEMENT
+       goal.actionOnDone = FF_ONDONE_DO_NEXT_COMMAND
+       goal.strParam1    = "param1"
+       goal.numParam1    = 101
+       goal.numParam2    = 102
+       goal.comment = "stop the bot"
+       print "DEBUG: Send goal to server"
+       client.send_goal(goal)
+       print "DEBUG: Wait for goal result from server"
+       client.wait_for_result(rospy.Duration.from_sec(5.0))
+       print "DEBUG: goal result received from server"
 
        # ---------------------- start of keywords for use in commands ---------------------------
 

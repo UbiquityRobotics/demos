@@ -1,5 +1,5 @@
-string  commandType
-string  statusState
+uint32  commandType
+uint32  statusState
 string  string1
 float64 num1
 string  string2

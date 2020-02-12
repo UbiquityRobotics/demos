@@ -36,6 +36,7 @@ import rospy
 import actionlib
 import actionlib_msgs
 from follow_actions.msg import DoFollowCmdAction
+import follow_actions.msg
 
 # our custom messages for the commands we will follow
 from custom_messages.msg import FollowerCommand, FollowerStatus
@@ -58,6 +59,27 @@ def degrees(r):
 # define global status states
 cmdStatusInProgress = "CmdInProgress"
 cmdStatusDone       = "CmdDone"
+
+# Get these from a common include would be best
+FF_CMD_CLEAR_COMMANDS=1       # Clear all commands (good idea on start of activities)
+FF_CMD_WAIT_IN_SECONDS=2      # stop execution of commands for this delay in seconds
+FF_CMD_CLEAR_IN_PROGRESS=9    # Clear queue special internal command
+
+FF_CMD_FOLLOW_FIDUCIAL=101    # Approach a fiducial up to a preset distance
+FF_CMD_STOP_MOVEMENT=102
+FF_CMD_DRIVE_FORWARD=103      # Drive forward for the specified time at the current drive_rate
+FF_CMD_DRIVE_REVERSE=104      # Drive reverse for the specified time at the current drive_rate
+FF_CMD_ROTATE_LEFT=105        # Rotate left   for the specified time at the current rotate_rate
+FF_CMD_ROTATE_RIGHT=106       # Rotate right  for the specified time at the current rotate_rate
+FF_CMD_SET_DRIVE_RATE=201     # Set drive_rate in M/sec for next drive command
+FF_CMD_SET_ROTATE_RATE=202    # Set the rotation rate for rotate commands in Rad/Sec
+FF_CMD_SET_MAX_LIN_RATE=203   # Set maximum linear rate in M/Sec used to approach the target fiducial
+FF_CMD_SET_MAX_ANG_RATE=204   # Set maximum angular rate in Rad/Sec used to rotate towards the target fiducial
+
+# Actions to take on command done
+FF_ONDONE_DO_NEXT_COMMAND=11  # Default is to go on to next command in the queue
+FF_ONDONE_ASSUME_POSE=12      # Once the fiducial is approached drive on top and rotate to pose of fiducial
+FF_ONDONE_DRIVE_ON_TOP=13     # Drive on top of the fiducial
 
 class DoFloorFollowServer:
     """
@@ -116,7 +138,7 @@ class DoFloorFollowServer:
 
        # default action we will use once we actually find and have approached the fiducial
        # The awaitNextCommand action will continue to follow until a new command comes in
-       self.actOnDone = 11  # HOW TO GET FROM .action file??? DoFollowCmdAction._action_goal.FF_ONDONE_DO_NEXT_COMMAND
+       self.actOnDone = FF_ONDONE_DO_NEXT_COMMAND
 
        # We need a state to indicate for the current command so we define 'InProgress' and 'Done'
        # When cmdStatus is InProgress we do not read new command except state control commands
@@ -182,7 +204,7 @@ class DoFloorFollowServer:
        self.fid_in_view = 0
        # ------------------------------------------------------------------
 
-       self.server = actionlib.SimpleActionServer('do_floor_follow', DoFollowCmdAction, self.run, False)
+       self.server = actionlib.SimpleActionServer('do_floor_follow', DoFollowCmdAction, self.execute, False)
 
        print "INIT START actionlib server \n"
        self.server.start()
@@ -429,13 +451,28 @@ class DoFloorFollowServer:
 
 
     """
-    Main loop
+    Receive ActionLib goals and pack them into command queue
     """
-    def run(self):
+    def execute(self, goal):
         # setup for looping at 25hz
         rate = rospy.Rate(self.loop_hz)
         secPerLoop = 1.0 / self.loop_hz
+ 
+        print "DEBUG: Got goal " + str(goal.commandType)
 
+        # TODO:  !!!! push goal into self.commandQueue
+        # place this command and its parameters onto the queue
+        # This packing must be consistent with commandQueue unpacking in main routine 
+        self.commandQueue.append((goal.commandType, goal.actionOnDone, goal.strParam1, goal.numParam1, goal.numParam2, goal.comment))
+
+        self.server.set_succeeded()
+        print "DEBUG: Mark goal as succeeded"
+
+
+    """
+    Main loop
+    """
+    def run(self):
         # Setup the variables that we will use later
         linSpeed = 0.0
         angSpeed = 0.0
@@ -452,7 +489,7 @@ class DoFloorFollowServer:
 
         print "Fiducial follow starting with fid %s and search %d looprate %d debug %d" % \
             (self.target_fiducial, self.target_search, self.loop_hz, self.debug_follow)
-        self.publishStatus1Str("ProgramStatus", "Starting", " ")
+        self.publishStatus1Str("ProgramStatus", goal.commandType, " ")
 
         # While our node is running
         while not rospy.is_shutdown():
@@ -698,4 +735,6 @@ if __name__ == "__main__":
 
     # Create an instance of our follow class
     server = DoFloorFollowServer()
+
+    self.run()
     rospy.spin()
