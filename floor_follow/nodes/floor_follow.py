@@ -454,11 +454,8 @@ class DoFloorFollowServer:
     Receive ActionLib goals and pack them into command queue
     """
     def execute(self, goal):
-        # setup for looping at 25hz
-        rate = rospy.Rate(self.loop_hz)
-        secPerLoop = 1.0 / self.loop_hz
  
-        print "DEBUG: Got goal " + str(goal.commandType)
+        print "Got goal " + str(goal.commandType) + " with actOnDone " + str(goal.actionOnDone)
 
         # TODO:  !!!! push goal into self.commandQueue
         # place this command and its parameters onto the queue
@@ -473,6 +470,11 @@ class DoFloorFollowServer:
     Main loop
     """
     def run(self):
+        print "INIT: Start the run main thread"
+        # setup for looping at 25hz
+        rate = rospy.Rate(self.loop_hz)
+        secPerLoop = 1.0 / self.loop_hz
+
         # Setup the variables that we will use later
         linSpeed = 0.0
         angSpeed = 0.0
@@ -489,7 +491,6 @@ class DoFloorFollowServer:
 
         print "Fiducial follow starting with fid %s and search %d looprate %d debug %d" % \
             (self.target_fiducial, self.target_search, self.loop_hz, self.debug_follow)
-        self.publishStatus1Str("ProgramStatus", goal.commandType, " ")
 
         # While our node is running
         while not rospy.is_shutdown():
@@ -736,5 +737,5 @@ if __name__ == "__main__":
     # Create an instance of our follow class
     server = DoFloorFollowServer()
 
-    self.run()
+    server.run()
     rospy.spin()

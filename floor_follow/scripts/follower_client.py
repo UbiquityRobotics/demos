@@ -90,9 +90,9 @@ class Controller:
 
        # ActionLib server setup 
        print "Setup connection to floor_follow server" 
-       client = actionlib.SimpleActionClient('do_floor_follow', DoFollowCmdAction)
+       self.client = actionlib.SimpleActionClient('do_floor_follow', DoFollowCmdAction)
        print "Wait for floor_follow server" 
-       client.wait_for_server()
+       self.client.wait_for_server()
        print "Connection to floor_follow server established" 
 
        # DEBUG !!! Do a test message
@@ -104,46 +104,36 @@ class Controller:
        goal.numParam2    = 102
        goal.comment = "stop the bot"
        print "DEBUG: Send goal to server"
-       client.send_goal(goal)
+       self.client.send_goal(goal)
        print "DEBUG: Wait for goal result from server"
-       client.wait_for_result(rospy.Duration.from_sec(5.0))
+       self.client.wait_for_result(rospy.Duration.from_sec(5.0))
        print "DEBUG: goal result received from server"
 
        # ---------------------- start of keywords for use in commands ---------------------------
 
        # Defines that are of value to pass in as elements of messages in the inbound command topic
 
-       # default action we will use once we actually find and have approached the fiducial
-       # The awaitNextCommand action will continue to follow until a new command comes in
-       self.actOnDoneStopFollowing = "StopFollowing"
-       self.actOnDoneDoNextCommand = "DoNextCommand"
-
        # We need a state to indicate for the current command so we define 'InProgress' and 'Done'
        # When cmdStatus is InProgress we do not read new command except state control commands
        self.cmdStatusInProgress = "InProgress"
        self.cmdStatusDone       = "Done"
 
-       # define names for specific commands which MUST be same as used by follow.py
-       self.cmdFollowFiducial  = "FollowFiducial"
-       self.cmdClearCommands   = "ClearCommands"
-       self.cmdClearInProgress = "ClearInProgress"
-       self.cmdStopMovement    = "StopMovement"
-       self.cmdDriveForward    = "DriveForward"
-       self.cmdDriveReverse    = "DriveReverse"
-       self.cmdRotateLeft      = "RotateLeft"
-       self.cmdRotateRight     = "RotateRight"
-
     def publishFollowerCommand(self, cmdType, actionOnDone, string1, numParam1, comment):
-        cmdMsg = FollowerCommand()
-        cmdMsg.commandType   = cmdType
-        cmdMsg.actionOnDone  = actionOnDone
-        cmdMsg.strParam1     = string1
-        cmdMsg.numParam1     = numParam1
-        cmdMsg.comment       = comment
-        self.followerCmdPub.publish(cmdMsg)
+        goal = DoFollowCmdGoal()
+        goal.commandType  = cmdType
+        goal.actionOnDone = actionOnDone
+        goal.strParam1    = string1
+        goal.numParam1    = numParam1
+        goal.numParam2    = 0
+        goal.comment      = comment
+
+        print "Send floor_follow goal to server"
+        self.client.send_goal(goal)
+        print "Wait for floor_follow goal result from server"
+        self.client.wait_for_result(rospy.Duration.from_sec(5.0))
+        print "floor_follow goal result received from server"
+
         self.rate.sleep()
-        self.rate.sleep()
-        # time.sleep(0.8)      # we have to wait a while between commands
 
     """
     Called when a Tracker Command is received
@@ -177,26 +167,25 @@ class Controller:
         # publishFollowerCommand(self, cmdType, actionOnDone, string1, numParam1, comment)
 
         # First optionally configure parameters we want to be active for commands
-        #self.publishFollowerCommand("ClearCommands",   " ", " ", 0.0, "Clear all pending commands")
-        self.publishFollowerCommand("SetMaxLinearRate", " ", " ", 0.3, "Set max linear approach rate")
-        self.publishFollowerCommand("SetDriveRate",    " ", " ", 0.15, "Set drive rate")
-        #self.publishFollowerCommand("SetRotateRate",   " ", " ", 0.3, "Set rotate rate")
-        #self.publishFollowerCommand("WaitInSeconds",   " ", " ", 2.0, "Wait a few sec ")
+        #self.publishFollowerCommand(FF_CMD_CLEAR_COMMANDS,  0 , " ", 0.0, "Clear all pending commands")
+        self.publishFollowerCommand(FF_CMD_SET_MAX_LIN_RATE, 0, " ", 0.3, "Set max linear approach rate")
+        self.publishFollowerCommand(FF_CMD_SET_DRIVE_RATE,   0, " ", 0.15, "Set drive rate")
+        #self.publishFollowerCommand(FF_CMD_SET_ROTATE_RATE, 0, " ", 0.3, "Set rotate rate")
+        #self.publishFollowerCommand(FF_CMD_WAIT_IN_SECONDS, 0, " ", 2.0, "Wait a few sec ")
 
         # Next we show how to follow a few fiducials on the floor
-        self.publishFollowerCommand("DriveForward",    " ", " ", 1.0, "Drive forward 1 sec at DriveRate")
-        #self.publishFollowerCommand("RotateRight",     " ", " ", 1.0, "Rotate right 1 sec at RotateRate")
-        #self.publishFollowerCommand("RotateLeft",      " ", " ", 2.0, "Rotate left  2 sec at RotateRate")
-        #self.publishFollowerCommand("RotateRight",     " ", " ", 1.0, "Rotate right 1 sec at RotateRate")
-        #self.publishFollowerCommand("FollowFiducial",  "DriveOnTop", "fid101", 0.0, "Follow this fiducial")
-        self.publishFollowerCommand("FollowFiducial",  "DoNextCommand", "fid105", 0.0, "Follow this fiducial")
-        self.publishFollowerCommand("FollowFiducial",  "DriveOnTop", "fid105", 0.0, "drive over fiducial")
-        #self.publishFollowerCommand("FollowFiducial",  "AssumePose", "fid103", 0.0, "Follow fiducial and match pose")
-        self.publishFollowerCommand("FollowFiducial",  "DoNextCommand", "fid106", 0.0, "Follow this fiducial")
-        self.publishFollowerCommand("FollowFiducial",  "DriveOnTop", "fid106", 0.0, "drive over fiducial")
-        self.publishFollowerCommand("RotateRight",      " ", " ", 1.0, "Rotate right sec at RotateRate")
-        self.publishFollowerCommand("FollowFiducial",  "DoNextCommand", "fid107", 0.0, "Follow this fiducial")
-        #self.publishFollowerCommand("FollowFiducial", "KeepFollowing", "fid104", 0.0, "Keep Follow fiducial 3")
+        self.publishFollowerCommand(FF_CMD_DRIVE_FORWARD,    0, " ", 1.0, "Drive forward 1 sec at DriveRate")
+        #self.publishFollowerCommand(FF_CMD_ROTATE_RIGHT,    0, " ", 1.0, "Rotate right 1 sec at RotateRate")
+        #self.publishFollowerCommand(FF_CMD_ROTATE_LEFT,     0, " ", 2.0, "Rotate left  2 sec at RotateRate")
+        #self.publishFollowerCommand(FF_CMD_ROTATE_RIGHT,    0, " ", 1.0, "Rotate right 1 sec at RotateRate")
+        #self.publishFollowerCommand(FF_CMD_FOLLOW_FIDUCIAL, FF_ONDONE_DRIVE_ON_TOP, "fid101", 0.0, "Follow this fiducial")
+        self.publishFollowerCommand(FF_CMD_FOLLOW_FIDUCIAL,  FF_ONDONE_DO_NEXT_COMMAND, "fid105", 0.0, "Follow this fiducial")
+        self.publishFollowerCommand(FF_CMD_FOLLOW_FIDUCIAL,  FF_ONDONE_DRIVE_ON_TOP, "fid105", 0.0, "drive over fiducial")
+        #self.publishFollowerCommand(FF_CMD_FOLLOW_FIDUCIAL, FF_ONDONE_ASSUME_POSE, "fid103", 0.0, "Follow fiducial and match pose")
+        self.publishFollowerCommand(FF_CMD_FOLLOW_FIDUCIAL,  FF_ONDONE_DO_NEXT_COMMAND, "fid106", 0.0, "Follow this fiducial")
+        self.publishFollowerCommand(FF_CMD_FOLLOW_FIDUCIAL,  FF_ONDONE_DRIVE_ON_TOP, "fid106", 0.0, "drive over fiducial")
+        self.publishFollowerCommand(FF_CMD_ROTATE_RIGHT,     0, " ", 1.0, "Rotate right sec at RotateRate")
+        self.publishFollowerCommand(FF_CMD_FOLLOW_FIDUCIAL,  FF_ONDONE_DO_NEXT_COMMAND, "fid107", 0.0, "Follow this fiducial")
 
         print "Commands sent "
 
