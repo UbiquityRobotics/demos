@@ -26,8 +26,15 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """
 
 """
-Floor Follow Demo.  Receives trasforms to fiducials
-Accepts goals to follow or approach fiducials of interest.
+Floor Follow is meant to follow fiducials on the floor to carry out instructions from a client
+
+This node accepts actionlib goals which tell this module to do things like go to a fiducial
+and many more operations of a more advanced nature in dealing with fiducials on the floor.
+
+The camera is meant to be elevated to follow floor fiducials well.
+
+This node is not a complient actionlib server until the states are properly handled.
+For info on actionlib server states see http://wiki.ros.org/actionlib/DetailedDescription
 """
 
 import roslib
@@ -45,7 +52,6 @@ from geometry_msgs.msg import TransformStamped, Twist
 from fiducial_msgs.msg import FiducialTransform, FiducialTransformArray
 from tf.transformations import euler_from_quaternion, quaternion_from_euler
 
-
 import tf2_ros
 from math import pi, sqrt, atan2
 import traceback
@@ -56,30 +62,42 @@ import time
 def degrees(r):
     return 180.0 * r / math.pi
 
-# define global status states
-cmdStatusInProgress = "CmdInProgress"
-cmdStatusDone       = "CmdDone"
 
-# Get these from a common include would be best
+#
+# Define commands and replies for the actionlib goals and results and so on
+#
+# These includes exist in DoFollowCmd.action file but I am not able to sort out
+# how to import them so I duplicate them here with an easy change later to use the .action file
+#
 FF_CMD_CLEAR_COMMANDS=1       # Clear all commands (good idea on start of activities)
 FF_CMD_WAIT_IN_SECONDS=2      # stop execution of commands for this delay in seconds
 FF_CMD_CLEAR_IN_PROGRESS=9    # Clear queue special internal command
 
-FF_CMD_FOLLOW_FIDUCIAL=101    # Approach a fiducial up to a preset distance
-FF_CMD_STOP_MOVEMENT=102
-FF_CMD_DRIVE_FORWARD=103      # Drive forward for the specified time at the current drive_rate
-FF_CMD_DRIVE_REVERSE=104      # Drive reverse for the specified time at the current drive_rate
-FF_CMD_ROTATE_LEFT=105        # Rotate left   for the specified time at the current rotate_rate
-FF_CMD_ROTATE_RIGHT=106       # Rotate right  for the specified time at the current rotate_rate
-FF_CMD_SET_DRIVE_RATE=201     # Set drive_rate in M/sec for next drive command
-FF_CMD_SET_ROTATE_RATE=202    # Set the rotation rate for rotate commands in Rad/Sec
-FF_CMD_SET_MAX_LIN_RATE=203   # Set maximum linear rate in M/Sec used to approach the target fiducial
-FF_CMD_SET_MAX_ANG_RATE=204   # Set maximum angular rate in Rad/Sec used to rotate towards the target fiducial
+
+FF_CMD_FOLLOW_FIDUCIAL=21     # Approach a fiducial up to a preset distance
+FF_CMD_STOP_MOVEMENT=22
+FF_CMD_DRIVE_FORWARD=23       # Drive forward for the specified time at the current drive_rate
+FF_CMD_DRIVE_REVERSE=24       # Drive reverse for the specified time at the current drive_rate
+FF_CMD_ROTATE_LEFT=25         # Rotate left   for the specified time at the current rotate_rate
+FF_CMD_ROTATE_RIGHT=26        # Rotate right  for the specified time at the current rotate_rate
+FF_CMD_SET_DRIVE_RATE=27      # Set drive_rate in M/sec for next drive command
+FF_CMD_SET_ROTATE_RATE=28     # Set the rotation rate for rotate commands in Rad/Sec
+FF_CMD_SET_MAX_LIN_RATE=29    # Set maximum linear rate in M/Sec used to approach the target fiducial
+FF_CMD_SET_MAX_ANG_RATE=30    # Set maximum angular rate in Rad/Sec used to rotate towards the target fiducial
 
 # Actions to take on command done
-FF_ONDONE_DO_NEXT_COMMAND=11  # Default is to go on to next command in the queue
-FF_ONDONE_ASSUME_POSE=12      # Once the fiducial is approached drive on top and rotate to pose of fiducial
-FF_ONDONE_DRIVE_ON_TOP=13     # Drive on top of the fiducial
+FF_ONDONE_DO_NEXT_COMMAND=51  # Default is to go on to next command in the queue
+FF_ONDONE_ASSUME_POSE=52      # Once the fiducial is approached drive on top and rotate to pose of fiducial
+FF_ONDONE_DRIVE_ON_TOP=53     # Drive on top of the fiducial
+
+# Results of last operation
+FF_RESULT_CMD_DONE_OK=0       # Last command completed ok OR no command done yet     
+FF_RESULT_CMD_DONE_ERROR=99   # Last command completed ok OR no command done yet     
+
+# Status and states for when commands are in progress or we are idle
+FF_STATUS_CMD_IDLE=100        # No command is being executed
+FF_STATUS_CMD_IN_PROGRESS=101 # A command is in progress (busy)
+
 
 class DoFloorFollowServer:
     """
@@ -115,17 +133,15 @@ class DoFloorFollowServer:
        # define a fiducial that when set implies we are not seeking any fiducial
        self.null_fiducial = "fidnone"
 
-       # The default fiducial we will start to follow from the start. Use of null_fiducial means idle at start
-       # The legacy fiducial follow used marker 49 so default to that here
-       # Set this to self.null_fiducial if you want idle at start awaiting commands
-       self.target_fiducial = rospy.get_param("~target_fiducial", "fid49")
+       # The current fiducial we will be following 
+       self.target_fiducial = self.null_fiducial
 
        # optionally we can disable verbose debug messages or leave them on as in legacy code
        # these were on in legacy version but can be disabled using parameter below
        # 1 is less verbose and 2 more verbose with 0 almost no messages
        self.debug_follow  = rospy.get_param("~debug_follow", 1)
        self.debug_verbose = rospy.get_param("~debug_verbose", 1)
-       self.debug_cmdvel  = 1    # set to 0 for sending to /cmd_vel else we do not publish to /cmd_vel topic
+       self.debug_cmdvel  = 0    # set to 0 for sending to /cmd_vel else we do not publish to /cmd_vel topic
 
        # Set to 1 for Legacy follower where we search for the sole fiducial if it goes out of sight
        # to operate in the mode where commands are used via topic this should be false
@@ -142,7 +158,11 @@ class DoFloorFollowServer:
 
        # We need a state to indicate for the current command so we define 'InProgress' and 'Done'
        # When cmdStatus is InProgress we do not read new command except state control commands
-       self.cmdStatus = cmdStatusDone
+       self.cmdStatus = FF_STATUS_CMD_IDLE
+
+       # the results for the prior command
+       self.cmdResult = FF_RESULT_CMD_DONE_OK
+       self.cmdErrorCode  = 0
 
        # ---------------------- End keywords for use in commands ---------------------------
 
@@ -324,13 +344,15 @@ class DoFloorFollowServer:
     def processNewCommand(self, cmdType, actOnDone, strParam1, numParam1, cmdComment):
         # default is when done fetch another command
         self.currentCommand  = cmdType
-        self.cmdStatus       = cmdStatusInProgress
+        self.cmdStatus       = FF_STATUS_CMD_IN_PROGRESS
         self.cmd_comment     = cmdComment
 
         retCode = 1
 
         # set the action on command done so we know what to do after this command 
+        # by default set that a command is in progress now
         self.actOnDone = FF_ONDONE_DO_NEXT_COMMAND
+        self.cmdStatus = FF_STATUS_CMD_IN_PROGRESS
 
         if cmdType == FF_CMD_FOLLOW_FIDUCIAL:
             # set new fiducial to follow with required end action once we have tracked it
@@ -344,7 +366,7 @@ class DoFloorFollowServer:
             self.publishStatus1StrAndValue(cmdType, "Waiting", "Wait for seconds of ", numParam1)
             # this wait would be best doing full loop so we could break out of it. 
             self.waitTimeLeft    = numParam1                  # set the duration of this movement
-            self.cmdStatus       = cmdStatusDone
+            self.cmdResult       = FF_RESULT_CMD_DONE_OK
 
         elif cmdType == FF_CMD_DRIVE_FORWARD:
             # Drive straight for the specified time in seconds of numParam1 at the current drive_rate
@@ -377,77 +399,12 @@ class DoFloorFollowServer:
         elif cmdType == FF_CMD_CLEAR_COMMANDS:
             # The queue has been cleared for all but this one but we may need to
             # cleanup some state in this background loop so do that now
-            self.cmdStatus       = cmdStatusDone
+            self.cmdStatus       = FF_STATUS_CMD_IDLE
         else:
             print "Invalid command of %d. No action taken" % (cmdType)
+            self.cmdStatus       = FF_STATUS_CMD_IDLE
             retCode = 0
         return retCode
-
-    """
-    Called when a Follower Command is received
-    """
-    def newFollowerCommand(self, msg):
-        cmdType    = msg.commandType
-        actOnDone  = msg.actionOnDone
-        strParam1  = msg.strParam1
-        numParam1  = msg.numParam1
-        numParam2  = msg.numParam2
-        cmdComment = msg.comment
-
-        print "Received New Command: %d actionOnDone: %d str1: '%s' num1 %lf comment: '%s'\n" % \
-                  (cmdType, actOnDone, strParam1, numParam1, cmdComment)
-
-        # special control commands handled here prior to commands that go into the queue
-        if cmdType == FF_CMD_CLEAR_IN_PROGRESS: 
-            self.cmdStatus       = cmdStatusDone
-            if self.waitTimeLeft > 0.0:
-                self.publishStatus1Str(cmdType, "Waiting", "Canceled due to ClearInProgress")
-            if self.moveTimeLeft > 0.0:
-                self.publishStatus1Str(cmdType, "Moving", "Canceled due to ClearInProgress")
-            self.waitTimeLeft    = 0.0    # clear wait time active or not
-            self.moveTimeLeft    = 0.0    # clear move time active or not
-        elif cmdType == FF_CMD_STOP_MOVEMENT: 
-            # Set the null fiducial which in effect leads to limbo or the next command if there is one
-            self.actOnDone       = FF_ONDONE_DO_NEXT_COMMAND
-            self.target_fiducial = self.null_fiducial
-            self.cmd_comment     = "clear any current movement command"
-            self.cmdStatus       = cmdStatusDone
-        elif cmdType == FF_CMD_SET_DRIVE_RATE:
-            # set a new drive rate in meters per second
-            if (numParam1 > 0.02) and (numParam1 < 1.2):
-                self.drive_rate = numParam1
-                self.publishStatus1StrAndValue(cmdType, "Set drive rate", "Rate in meters per sec of ", numParam1)
-            else:
-                self.publishStatus1StrAndValue(cmdType, "Set drive rate", "Illegal rate in meters per sec of ", numParam1)
-        elif cmdType == FF_CMD_SET_ROTATE_RATE:
-            # set a new rotation rate in radians per second
-            if (numParam1 > 0.02) and (numParam1 < 3.14):
-                self.rotate_rate = numParam1
-                self.publishStatus1StrAndValue(cmdType, "Set rotate rate", "Rate in radians per sec of ", numParam1)
-            else:
-                self.publishStatus1StrAndValue(cmdType, "Set rotate rate", "Illegal rate in radians per sec of ", numParam1)
-        elif cmdType == FF_CMD_SET_MAX_LIN_RATE:
-            # set a new maximum follow linear rate in meters per sec
-            if (numParam1 > 0.02) and (numParam1 < 1.20):
-                self.max_linear_rate = numParam1
-                self.publishStatus1StrAndValue(cmdType, "Set max linear approach rate", "Rate in meters per sec of ", numParam1)
-            else:
-                self.publishStatus1StrAndValue(cmdType, "Set max linear rate", "Illegal rate in meters per sec of ", numParam1)
-        elif cmdType == FF_CMD_SET_MAX_ANG_RATE:
-            # set a new maximum follow rotation rate in radians per sec
-            if (numParam1 > 0.02) and (numParam1 < 2.00):
-                self.max_angular_rate = numParam1
-                self.publishStatus1StrAndValue(cmdType, "Set max angular rate", "Rate in radians per sec of ", numParam1)
-            else:
-                self.publishStatus1StrAndValue(cmdType, "Set max angular rate", "Illegal rate in radians per sec of ", numParam1)
-        else:
-            if cmdType == FF_CMD_CLEAR_COMMANDS:
-                # clear command queue clears queue so it is first and also picked up for any cleanup in loop
-                self.commandQueue    = []
-
-            # place this command and its parameters onto the queue
-            # This packing must be consistent with commandQueue unpacking in main routine 
-            self.commandQueue.append((cmdType, actOnDone, strParam1, numParam1, numParam2, cmdComment))
 
 
     """
@@ -455,15 +412,24 @@ class DoFloorFollowServer:
     """
     def execute(self, goal):
  
-        print "Got goal " + str(goal.commandType) + " with actOnDone " + str(goal.actionOnDone)
+        print "Got goal: Cmd " + str(goal.commandType) + " actOnDone " + str(goal.actionOnDone) + " state is " + str(self.cmdStatus)
 
-        # TODO:  !!!! push goal into self.commandQueue
-        # place this command and its parameters onto the queue
-        # This packing must be consistent with commandQueue unpacking in main routine 
-        self.commandQueue.append((goal.commandType, goal.actionOnDone, goal.strParam1, goal.numParam1, goal.numParam2, goal.comment))
+        # To keep this module simple we may restrict the queue to only be loaded if we are idle
+        # unless we receive some form of abort
+        if self.cmdStatus == FF_STATUS_CMD_IDLE:
+            # place this command and its parameters onto the queue
+            # This packing must be consistent with commandQueue unpacking in main routine 
+            self.commandQueue.append((goal.commandType, goal.actionOnDone, goal.strParam1, goal.numParam1, goal.numParam2, goal.comment))
 
-        self.server.set_succeeded()
-        print "DEBUG: Mark goal as succeeded"
+            print "DEBUG: Mark goal as succeeded"
+            self.server.result.commandResult = FF_RESULT_CMD_DONE_OK
+            rospy.loginfo('%s: Succeeded' % self._action_name)
+            self.server.set_succeeded(self._result)
+        else:
+            # we reject this goal unless it is to clear all activity or pending operation.
+            # TODO: Lots of logic is required to clear or reject one goal in progress. Need to do this next
+            print "DEBUG: Mark goal as rejected due to being busy"
+            # self.server.set_rejected()
 
 
     """
@@ -495,11 +461,9 @@ class DoFloorFollowServer:
         # While our node is running
         while not rospy.is_shutdown():
 
-            # If we are not held off due to a command still in progres then search for new commands
-            # The cmdStatus of InProgress can be cleared but only as a special command
-            # of clearInProgress received right off of the inbound command topic
+            # If a command has been accepted as an actionlib goal we pull it off here
             inboundCmdCount = len(self.commandQueue)
-            if (inboundCmdCount > 0) and (self.cmdStatus != cmdStatusInProgress):
+            if (inboundCmdCount > 0) and (self.cmdStatus != FF_STATUS_CMD_IN_PROGRESS):
                 newCommand  = self.commandQueue.pop(0)
 
                 # This unpacking must be consistent with commandQueue append on message reception
@@ -513,11 +477,11 @@ class DoFloorFollowServer:
                 cmdValid = self.processNewCommand(cmdType, actOnDone, strParam1, numParam1, cmdComment)
 
                 if cmdValid == 1:
-                    # some commands need more work here
+                    # TODO: some commands for abort or clearing overrides need more work here
                     if cmdType == FF_CMD_CLEAR_COMMANDS:
                         # The queue has been cleared for all but this one but we may need to
                         # cleanup some state in this background loop so do that now
-                        self.cmdStatus       = cmdStatusDone
+                        self.cmdStatus       = FF_STATUS_CMD_IDLE
                         self.drive_speed     = 0.0
                         self.rotate_speed    = 0.0
                 else:
@@ -529,19 +493,19 @@ class DoFloorFollowServer:
                 self.waitTimeLeft = self.waitTimeLeft - secPerLoop 
                 if (self.waitTimeLeft <= 0.0):
                     self.publishStatus1Str(cmdType, "Waiting", "Done with waiting")
-                    self.cmdStatus       = cmdStatusDone   # allows next command to be read
 
             # Handle drive and rotate commands until they time out
+            # TODO  Enhancement is to Implement odom based driving and rotations
             if (self.moveTimeLeft > 0.0):
                 driveSpeed  = self.drive_speed
                 rotateSpeed = self.rotate_speed
-                print "Move in progress for cmd %d. driveSpeed %f rotateSpeed %f with %f sec left" % \
-                    (cmdType, driveSpeed, rotateSpeed, self.moveTimeLeft)
+                print "Move in progress for cmd %d. Status is %d driveSpeed %f rotateSpeed %f with %f sec left" % \
+                    (cmdType, self.cmdStatus, driveSpeed, rotateSpeed, self.moveTimeLeft)
                 self.moveTimeLeft = self.moveTimeLeft - secPerLoop 
                 twist = Twist()
                 twist.angular.z = 0.0
                 twist.linear.x  = 0.0
-                if (self.cmdStatus == cmdStatusInProgress) and (self.moveTimeLeft > 0.0):
+                if (self.cmdStatus == FF_STATUS_CMD_IN_PROGRESS) and (self.moveTimeLeft > 0.0):
                     if (cmdType == FF_CMD_DRIVE_FORWARD) or (cmdType == FF_CMD_DRIVE_REVERSE): 
                         twist.linear.x   = driveSpeed
                     if (cmdType == FF_CMD_ROTATE_LEFT) or (cmdType == FF_CMD_ROTATE_RIGHT):
@@ -551,7 +515,8 @@ class DoFloorFollowServer:
                         self.publishStatus1Str(cmdType, "Done", "Driving completed")
                     elif (cmdType == FF_CMD_ROTATE_LEFT) or (cmdType == FF_CMD_ROTATE_RIGHT):
                         self.publishStatus1Str(cmdType, "Done", "Rotation completed")
-                    self.cmdStatus       = cmdStatusDone
+                    self.cmdStatus       = FF_STATUS_CMD_IDLE
+                    self.cmdResult       = FF_RESULT_CMD_DONE_OK
                     driveSpeed            = 0.0
                     rotateSpeed           = 0.0
 
@@ -563,7 +528,7 @@ class DoFloorFollowServer:
 
             # if we do not have a fiducial to track we do the pause and skip follow logic
             if self.target_fiducial == self.null_fiducial:
-                print "IDLE: No fiducial to follow. " 
+                # print "IDLE: No fiducial to follow. " 
                 self.fid_in_view = 0
                 rate.sleep()
                 continue
@@ -661,8 +626,8 @@ class DoFloorFollowServer:
                 # and we see the target and action once found is set to stop following
                 fidDistanceX = self.fid_x 
                 fidRotationZ = self.fid_r 
-                if  (self.cmdStatus == cmdStatusInProgress) and \
-                    (self.currentCommand == cmdNameFollowFiducial):
+                if  (self.cmdStatus == FF_STATUS_CMD_IN_PROGRESS) and \
+                    (self.currentCommand == FF_CMD_FOLLOW_FIDUCIAL):
                    print "Arrived at following fiducial %s  actionOnDone %d comment %s\n" % \
                        (self.target_fiducial, self.actOnDone, self.cmd_comment)
                    if (self.actOnDone == FF_ONDONE_DRIVE_ON_TOP) or (self.actOnDone == FF_ONDONE_ASSUME_POSE):
@@ -701,19 +666,14 @@ class DoFloorFollowServer:
                            self.target_fiducial = self.null_fiducial
                            self.fid_in_view = 0
                            self.publishStatus2Str(cmdType, "AtFiducial", self.target_fiducial, "Assumed pose of fiducial")
-                           self.cmdStatus = cmdStatusDone
+                           self.cmdStatus = FF_STATUS_CMD_IDLE
+                           self.cmdResult = FF_RESULT_CMD_DONE_OK
                        else:
                            # This is the just drive on top and don't rotate situation
-                           self.cmdStatus = cmdStatusDone
+                           self.cmdStatus = FF_STATUS_CMD_IDLE
+                           self.cmdResult = FF_RESULT_CMD_DONE_OK
                            self.target_fiducial = self.null_fiducial
                            self.fid_in_view = 0
-
-                   # depreciated mode for following
-                   #elif (self.actOnDone != actOnDoneKeepFollowing):
-                   #   self.cmdStatus = cmdStatusDone
-                   #   self.target_fiducial = self.null_fiducial
-                   #   self.fid_in_view = 0
-                   #   self.publishStatus2Str(cmdType, "AtFiducial", self.target_fiducial, "Proceeding to next command")
 
             if self.debug_follow > 1:
                 print "zero", zeroSpeed, self.suppressCmd
