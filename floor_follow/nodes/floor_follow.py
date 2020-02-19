@@ -69,6 +69,7 @@ def degrees(r):
 # These includes exist in DoFollowCmd.action file but I am not able to sort out
 # how to import them so I duplicate them here with an easy change later to use the .action file
 #
+FF_CMD_NO_COMMAND=0           # No command defined
 FF_CMD_CLEAR_COMMANDS=1       # Clear all commands (good idea on start of activities)
 FF_CMD_WAIT_IN_SECONDS=2      # stop execution of commands for this delay in seconds
 FF_CMD_CLEAR_IN_PROGRESS=9    # Clear queue special internal command
@@ -94,12 +95,22 @@ FF_ONDONE_DRIVE_ON_TOP=53     # Drive on top of the fiducial
 FF_RESULT_CMD_DONE_OK=0       # Last command completed ok OR no command done yet     
 FF_RESULT_CMD_DONE_ERROR=99   # Last command completed ok OR no command done yet     
 
-# Status and states for when commands are in progress or we are idle
+# Status and states for when commands are in progress or we are idle. Errors are negative
+FF_STATUS_CMD_NO_ACTION=0     # No action required of the type this handler performs 
+FF_STATUS_CMD_DONE_OK=1       # The command was executed successfully
 FF_STATUS_CMD_IDLE=100        # No command is being executed
-FF_STATUS_CMD_IN_PROGRESS=101 # A command is in progress (busy)
+FF_STATUS_CMD_IN_PROGRESS=102 # A command is in progress (busy)
+FF_STATUS_CMD_ERROR=-1        # An error happened in the command execution
+FF_STATUS_CMD_FID_NOT_SEEN=-5 # If a fiducial is not seen we have to error some handler(s)
+FF_STATUS_CMD_FID_TOO_FAR=-6  # The fiducial is too far away to process this command
+FF_STATUS_CMD_TIMEOUT=-9      # A timeout per the passed in or worse case timeout
 
 
 class DoFloorFollowServer:
+    # create messages that are used to publish feedback/result
+    _feedback = follow_actions.msg.DoFollowCmdFeedback()
+    _result = follow_actions.msg.DoFollowCmdResult()
+
     """
     Constructor for our class
     """
@@ -224,7 +235,7 @@ class DoFloorFollowServer:
        self.fid_in_view = 0
        # ------------------------------------------------------------------
 
-       self.server = actionlib.SimpleActionServer('do_floor_follow', DoFollowCmdAction, self.execute, False)
+       self.server = actionlib.SimpleActionServer('do_floor_follow', DoFollowCmdAction, self.executeAction, False)
 
        print "INIT START actionlib server \n"
        self.server.start()
@@ -406,11 +417,245 @@ class DoFloorFollowServer:
             retCode = 0
         return retCode
 
+    # -----------------------------------------------------------------------------------------
+    # The handler routines execute specific goals.
+    # They return with a status code and a string. 
+    # The return code is an integer which is as follows where errors are negative values
+    #   FF_STATUS_CMD_NO_ACTION  No action done (not an error, means no action required)
+    #   FF_STATUS_CMD_DONE_OK    The command was executed with success
+    #   FF_STATUS_CMD_ERROR      An error speific to the command happened
+    #   FF_STATUS_CMD_TIMEOUT    The command took longer than the given timeout
+    # The string is informational only
+    # -----------------------------------------------------------------------------------------
+
+    #
+    # handler for wait command.  
+    # CMD handlers Return 0 on no action required and 1 for 'done' and -1 for done with error
+    def handle_waitCommand(self, loopRate):
+        if (self.waitTimeLeft <= 0.0):
+            return FF_STATUS_CMD_NO_ACTION, "No wait required"
+        secPerLoop = 1.0 / loopRate 
+        r = rospy.Rate(loopRate)
+        while (self.waitTimeLeft > 0.0):
+            self.waitTimeLeft = self.waitTimeLeft - secPerLoop 
+            r.sleep()
+
+        return FF_STATUS_CMD_DONE_OK, "Wait completed"
+
+    #
+    # handler for drive commands
+    #
+    # TODO  Enhancement is to Implement odom based driving and rotations
+    def handle_driveCommand(self, cmdType, driveSpeed, rotateSpeed, loopRate, timeout):
+
+        # only deal with drive types we support
+        if  cmdType == FF_CMD_DRIVE_FORWARD or cmdType == FF_CMD_DRIVE_REVERSE or \
+            cmdType == FF_CMD_ROTATE_LEFT   or cmdType == FF_CMD_ROTATE_RIGHT:
+            if (self.moveTimeLeft <= 0.0):
+                self.moveTimeLeft = 0.0
+                return FF_STATUS_CMD_DONE_OK, "No action. Drive command already complete"
+        else:
+           return 0, "No action. Drive command not progress"
+
+        secInProgress = 0.0
+        secPerLoop = 1.0 / loopRate 
+        r = rospy.Rate(loopRate)
+
+        print "Move in progress for cmd %d. Status is %d driveSpeed %f rotateSpeed %f with %f sec left" % \
+            (cmdType, self.cmdStatus, driveSpeed, rotateSpeed, self.moveTimeLeft)
+
+        twist = Twist()
+        twist.angular.z = 0.0
+        twist.linear.x  = 0.0
+
+        while self.moveTimeLeft > 0.0:
+            if (cmdType == FF_CMD_DRIVE_FORWARD) or (cmdType == FF_CMD_DRIVE_REVERSE): 
+                twist.linear.x   = driveSpeed
+            if (cmdType == FF_CMD_ROTATE_LEFT)   or (cmdType == FF_CMD_ROTATE_RIGHT):
+                twist.angular.z  = rotateSpeed
+
+            # publish the required /cmd_vel message to motor controller
+            if self.debug_cmdvel == 0: 
+                self.cmdvelPub.publish(twist)
+
+            self.moveTimeLeft = self.moveTimeLeft - secPerLoop 
+
+            secInProgress += secPerLoop
+            if secInProgress > timeout:
+                return FF_STATUS_CMD_TIMEOUT, "Timeout in the drive command!"
+
+        # After the drive is done wrap thing up
+        if (cmdType == FF_CMD_DRIVE_FORWARD) or (cmdType == FF_CMD_DRIVE_REVERSE): 
+            self.publishStatus1Str(cmdType, "Done", "Driving completed")
+        elif (self.cmdType == FF_CMD_ROTATE_LEFT) or (cmdType == FF_CMD_ROTATE_RIGHT):
+            self.publishStatus1Str(cmdType, "Done", "Rotation completed")
+        self.cmdStatus       = FF_STATUS_CMD_IDLE
+        self.cmdResult       = FF_RESULT_CMD_DONE_OK
+
+        return FF_STATUS_CMD_DONE_OK, "No action. Drive command already complete"
+
+
+    # -----------------------------------------------------------------------------------------
+    # handler for approaching a fiducial
+    #
+    # This handler relies on many node global variables and is mostly here to make overall code 
+    # be more readable.
+    # This should be called only if we have the fiducial to follow already in view per  self.fid_in_view
+    #
+    def handle_approachFiducial(target_fiducial, target_search):
+        # ------------------------------------------------------------------------------------
+
+        # Calculate the error in the x and y directions
+        forward_error = self.fid_x - self.min_dist
+        lateral_error = self.fid_y
+
+        # Calculate the amount of turning needed towards the fiducial
+        # atan2 works for any point on a circle (as opposed to atan)
+        angular_error = math.atan2(self.fid_y, self.fid_x)
+
+        if self.fid_in_view == 1:
+            loops_since_fid_last_seen = 0
+        else:
+            loops_since_fid_last_seen += 1
+
+        if self.debug_follow > 0 and (loops_since_fid_last_seen % 10) == 0:
+            print "Fid: %s Dist %f in_view %d search %d missing count %d Errors: forward %f lateral %f angular %f" % \
+                (target_fiducial, self.fid_x, self.fid_in_view, target_search, loops_since_fid_last_seen, \
+                forward_error, lateral_error, degrees(angular_error))
+
+        # Decide on movement required from observations with or without fiducial being seen
+        if forward_error > self.max_dist:
+            return FF_STATUS_CMD_FID_TOO_FAR,"Fiducial is too far away to approach"
+
+        elif self.fid_in_view == 1:
+            # A fiducial was detected since last iteration of this loop
+
+            # Set the turning speed based on the angular error
+            # Add some damping based on the previous speed to smooth the motion 
+            #angSpeed = (angular_error * self.angular_rate) - (angSpeed / 2.0)
+            angSpeed = angular_error * self.angular_rate
+            # Make sure that the angular speed is within limits
+            if angSpeed < -self.max_angular_rate:
+                angSpeed = -self.max_angular_rate
+            if angSpeed > self.max_angular_rate:
+                angSpeed = self.max_angular_rate
+
+            # Set the forward speed based distance
+            linSpeed = forward_error * self.linear_rate
+            # Make sure that the angular speed is within limits
+            if linSpeed < -self.max_linear_rate:
+                linSpeed = -self.max_linear_rate
+            if linSpeed > self.max_linear_rate:
+                linSpeed = self.max_linear_rate
+
+            if self.debug_follow > 0:
+                print "DistMovement: linSpeed %f angSpeed %f"  % (linSpeed, angSpeed)
+
+        else:
+            # A fiducial was NOT detected since last iteration of this loop
+
+            if loops_since_fid_last_seen < self.hysteresis_count:
+                # Hysteresis, don't immediately stop if the fiducial is lost
+                # Decrease the speed (assuming linear decay is <1)
+                linSpeed *= self.linear_decay
+
+            # Try to refind fiducial continuously if we see it or rotate to search.
+            # We will only search for the fiducial if the target_search option is nonzero
+            elif target_search > 0 and loops_since_fid_last_seen < self.max_lost_count:
+                # Stop moving forward
+                linSpeed = 0
+                # Keep turning in the same direction
+                if angSpeed < 0:
+                    angSpeed = -self.lost_angular_rate
+                elif angSpeed > 0:
+                    angSpeed = self.lost_angular_rate
+                else:
+                    angSpeed = 0
+                print "Try keep rotating to refind fiducial %s try# %d" % (target_fiducial, loops_since_fid_last_seen)
+
+            else:
+                # go to zero movement 
+                angSpeed = 0
+                linSpeed = 0
+
+        if self.debug_follow > 1:
+            print "Speeds: linear %f angular %f" % (linSpeed, angSpeed)
+
+        # Create a Twist message from the velocities and publish it
+        # Avoid sending repeated zero speed commands, so teleop can work
+        zeroSpeed = (angSpeed == 0 and linSpeed == 0)
+        if not zeroSpeed:
+            self.suppressCmd = False
+
+        if (self.fid_in_view == 1) and (forward_error <= (self.min_dist * 1.005)) \
+            and (abs(linSpeed) < 0.01) and (abs(angSpeed) < 0.01):
+            # Here is logic to stop following if we think we are at the target
+            # and we see the target and action once found is set to stop following
+            fidDistanceX = self.fid_x 
+            fidRotationZ = self.fid_r 
+            if  (self.cmdStatus == FF_STATUS_CMD_IN_PROGRESS) and \
+                (self.currentCommand == FF_CMD_FOLLOW_FIDUCIAL):
+                print "Arrived at following fiducial %s  actionOnDone %d comment %s\n" % \
+                    (target_fiducial, self.actOnDone, self.cmd_comment)
+
+                if self.actOnDone == FF_ONDONE_DRIVE_ON_TOP or self.actOnDone == FF_ONDONE_ASSUME_POSE:
+                    # Roughly Drive over the fiducial 
+                    print "fiducial %s  is %f meters away at angle of %s radians " % \
+                        (target_fiducial, fidDistanceX, fidRotationZ)
+                    self.publishStatus2Str(cmdType, "AtFiducial", target_fiducial, "Drive to over the Fiducial")
+                    twist = Twist()
+                    twist.angular.z = 0.0
+                    twist.linear.x  = 0.1   # a rather slow speed for accuracy of simple movement
+                    # using slow speed drive over the fiducial
+                    self.moveTimeLeft = fidDistanceX / twist.linear.x
+                    print "Drive over fiducial for %f sec" % (self.moveTimeLeft)
+                    while self.moveTimeLeft > 0.0:
+                        self.moveTimeLeft = self.moveTimeLeft - secPerLoop 
+                        if self.debug_cmdvel == 0: 
+                            self.cmdvelPub.publish(twist)
+                        rate.sleep()
+
+                    self.publishStatus2Str(cmdType, "AtFiducial", target_fiducial, "Drove to location of fiducial") 
+
+                    if self.actOnDone == FF_ONDONE_ASSUME_POSE:
+                        # If assuming the pose then using slow speed rotate over the fiducial
+                        twist.linear.x  = 0.0
+                        twist.angular.z = 0.2     # a rather slow rotation
+                        if (fidRotationZ < 0.0):
+                            twist.angular.z = twist.angular.z * -1.0
+                        self.moveTimeLeft = abs(fidRotationZ / twist.angular.z)
+                        print "Rotate over fiducial for %f sec" % (self.moveTimeLeft)
+                        self.publishStatus2Str(cmdType, "AtFiducial", target_fiducial, "Rotate to pose of fiducial")
+                        while self.moveTimeLeft > 0.0:
+                            self.moveTimeLeft = self.moveTimeLeft - secPerLoop 
+                            if self.debug_cmdvel == 0: 
+                                self.cmdvelPub.publish(twist)
+                            rate.sleep()
+                        self.publishStatus2Str(cmdType, "AtFiducial", target_fiducial, "Assumed pose of fiducial")
+                        return FF_STATUS_CMD_DONE_OK, "At the fiducial and have assumed the pose"
+                    else:
+                        # This is the just drive on top and don't rotate situation
+                        return FF_STATUS_CMD_DONE_OK, "At the fiducial and on top of it now"
+
+            if self.debug_follow > 1:
+                print "zero", zeroSpeed, self.suppressCmd
+            if not self.suppressCmd:
+                twist = Twist()
+                twist.angular.z = angSpeed
+                twist.linear.x = linSpeed
+                if self.debug_cmdvel == 0: 
+                    self.cmdvelPub.publish(twist)
+                if zeroSpeed:
+                    self.suppressCmd = True
+                return FF_STATUS_CMD_DONE_OK, "Have approached the fiducial"
+
+        # This handler relies on being called over and over till done
+        return FF_STATUS_CMD_IN_PROGRESS, "Still approaching the fiducial"
 
     """
     Receive ActionLib goals and pack them into command queue
     """
-    def execute(self, goal):
+    def executeActionToQueue(self, goal):
  
         print "Got goal: Cmd " + str(goal.commandType) + " actOnDone " + str(goal.actionOnDone) + " state is " + str(self.cmdStatus)
 
@@ -419,18 +664,126 @@ class DoFloorFollowServer:
         if self.cmdStatus == FF_STATUS_CMD_IDLE:
             # place this command and its parameters onto the queue
             # This packing must be consistent with commandQueue unpacking in main routine 
+            
             self.commandQueue.append((goal.commandType, goal.actionOnDone, goal.strParam1, goal.numParam1, goal.numParam2, goal.comment))
 
-            print "DEBUG: Mark goal as succeeded"
-            self.server.result.commandResult = FF_RESULT_CMD_DONE_OK
-            rospy.loginfo('%s: Succeeded' % self._action_name)
-            self.server.set_succeeded(self._result)
+            #self.server.result.commandResult = FF_RESULT_CMD_DONE_OK
+            #rospy.loginfo('%s: Succeeded' % self._action_name)
+            #self.server.set_succeeded(self._result)
+
+            #print "DEBUG: Mark goal as succeeded"
+            #self.server.set_succeeded()
         else:
             # we reject this goal unless it is to clear all activity or pending operation.
             # TODO: Lots of logic is required to clear or reject one goal in progress. Need to do this next
             print "DEBUG: Mark goal as rejected due to being busy"
             # self.server.set_rejected()
 
+
+
+    """
+    Receive ActionLib goals and do processing for this one action
+    This is a simplier model than the queued action model
+    """
+    def executeAction(self, goal):
+        print "Got goal: Cmd " + str(goal.commandType) + " actOnDone " + str(goal.actionOnDone) + " state is " + str(self.cmdStatus)
+
+        # This unpacking must be consistent with commandQueue append on message reception
+        self.cmdType    = goal.commandType 
+        self.actOnDone  = goal.actionOnDone 
+        self.strParam1  = goal.strParam1
+        self.numParam1  = goal.numParam1
+        self.numParam2  = goal.numParam2
+        self.cmdComment = goal.comment
+
+        print "Process Newly Received Goal:  cmdType %d actionOnDone %d str1 %s num1 %lf comment %s\n" % \
+            (self.cmdType, self.actOnDone, self.strParam1, self.numParam1, self.cmdComment)
+
+        # Interprit the command and set state based on the command
+        cmdValid = self.processNewCommand(self.cmdType, self.actOnDone, self.strParam1, self.numParam1, self.cmdComment)
+
+        if cmdValid == 1:
+            # TODO: some commands for abort or clearing overrides need more work here
+            if self.cmdType == FF_CMD_CLEAR_COMMANDS:
+                # The queue has been cleared for all but this one but we may need to
+                # cleanup some state in this background loop so do that now
+                self.cmdStatus       = FF_STATUS_CMD_IDLE
+                self.drive_speed     = 0.0
+                self.rotate_speed    = 0.0
+        else:
+            print "Invalid command of %d. No action taken" % (cmdType)
+            self.server.set_aborted(None, "Invalid command")
+
+        # -------------------
+        # Handle wait command till we have waited long enough
+        retCode,retString = self.handle_waitCommand(self.loop_hz,)
+        if (retCode == FF_STATUS_CMD_DONE_OK):
+            print "Wait command of %f seconds done. %s" % (self.numParam1, retString)
+            self.server.set_succeeded(self._result)
+            return 
+        elif (retCode < 0):
+            self.server.set_aborted(self._result)
+            return 
+        # Other return codes indicate this handler was not required
+            
+        # -------------------
+        # Handle drive and rotate commands until they time out
+        retCode,retString = self.handle_driveCommand(self.cmdType, self.drive_speed, self.rotate_speed, self.loop_hz, 20.0)
+        if (retCode == FF_STATUS_CMD_DONE_OK):
+            print "Drive command %d at speed %f and rotate of %f done. %s" % (self.cmdType, self.drive_speed, self.rotate_speed, retString)
+            self.server.set_succeeded(self._result)
+            return 
+        elif (retCode == FF_STATUS_CMD_TIMEOUT):
+            print "Drive command %d timeout. %s" % (self.cmdType,retString)
+            self.server.set_aborted(self._result)
+            return 
+        elif (retCode < 0):
+            print "Drive command %d error of %d. %s" % (self.cmdType,retCode,retString)
+            self.server.set_aborted(self._result)
+            return 
+        # Other return codes indicate this handler was not required
+            
+        # if we do not have a fiducial to track we do the pause and skip follow logic
+        if self.target_fiducial == self.null_fiducial:
+            # print "IDLE: No fiducial to follow. " 
+            self.fid_in_view = 0
+            self.server.set_aborted(self._result)
+            return 
+
+        # -------------------
+        # Handle approaching a fiducial
+        retCode = FF_STATUS_CMD_IN_PROGRESS
+        secInProgress = 0.0
+        timeout = 30.0
+        secPerLoop = 1.0 / self.loop_hz 
+        r = rospy.Rate(loopRate)
+        while retCode == FF_STATUS_CMD_IN_PROGRESS:
+            retCode,retString  = self.handle_approachFiducial(self.target_fiducial, self.target_search)
+            if (retCode == FF_STATUS_CMD_DONE_OK):
+                self.server.set_succeeded(self._result)
+                self.cmdStatus = FF_STATUS_CMD_IDLE
+                self.cmdResult = FF_RESULT_CMD_DONE_OK
+                self.target_fiducial = self.null_fiducial
+                self.fid_in_view = 0
+                return 
+            elif (retCode < 0):
+                print "Approach of fiducial %s error of %d. %s" % (self.target_fiducial,retCode,retString)
+                self.server.set_aborted(self._result)
+                return 
+            secInProgress += secPerLoop
+            if secInProgress > timeout:
+                print "Approach of fiducial %s timeout." % (self.target_fiducial)
+                self.server.set_aborted(self._result)
+                return 
+
+        # Other return codes indicate this handler was not required
+
+        # 
+        # If we get to here we did not know how to process this goal
+        print "Unknown goal with command type %d" % (self.cmdType)
+        self.server.set_aborted(self._result)
+        return
+            
 
     """
     Main loop
@@ -442,6 +795,13 @@ class DoFloorFollowServer:
         secPerLoop = 1.0 / self.loop_hz
 
         # Setup the variables that we will use later
+        self.cmdType    = FF_CMD_NO_COMMAND
+        self.actOnDone  = FF_ONDONE_DO_NEXT_COMMAND
+        self.strParam1  = ""
+        self.numParam1  = 0
+        self.numParam2  = 0
+        self.cmdComment = ""
+
         linSpeed = 0.0
         angSpeed = 0.0
         loops_since_fid_last_seen = 0
@@ -460,234 +820,6 @@ class DoFloorFollowServer:
 
         # While our node is running
         while not rospy.is_shutdown():
-
-            # If a command has been accepted as an actionlib goal we pull it off here
-            inboundCmdCount = len(self.commandQueue)
-            if (inboundCmdCount > 0) and (self.cmdStatus != FF_STATUS_CMD_IN_PROGRESS):
-                newCommand  = self.commandQueue.pop(0)
-
-                # This unpacking must be consistent with commandQueue append on message reception
-                # The command message is generic where the context of the parameters are cmdType specific
-                cmdType, actOnDone, strParam1, numParam1, numParam2, cmdComment = newCommand
-
-                print "Process next queued Command: %d actionOnDone %d str1 %s num1 %lf comment %s\n" % \
-                    (cmdType, actOnDone, strParam1, numParam1, cmdComment)
-
-                # Interprit the command and set state based on the command
-                cmdValid = self.processNewCommand(cmdType, actOnDone, strParam1, numParam1, cmdComment)
-
-                if cmdValid == 1:
-                    # TODO: some commands for abort or clearing overrides need more work here
-                    if cmdType == FF_CMD_CLEAR_COMMANDS:
-                        # The queue has been cleared for all but this one but we may need to
-                        # cleanup some state in this background loop so do that now
-                        self.cmdStatus       = FF_STATUS_CMD_IDLE
-                        self.drive_speed     = 0.0
-                        self.rotate_speed    = 0.0
-                else:
-                    print "Invalid command of %d. No action taken" % (cmdType)
-
-            # Handle wait command and still allow it to be aborted by new message
-            # We could have a special abort the wait using a button in future if desired
-            if (self.waitTimeLeft > 0.0):
-                self.waitTimeLeft = self.waitTimeLeft - secPerLoop 
-                if (self.waitTimeLeft <= 0.0):
-                    self.publishStatus1Str(cmdType, "Waiting", "Done with waiting")
-
-            # Handle drive and rotate commands until they time out
-            # TODO  Enhancement is to Implement odom based driving and rotations
-            if (self.moveTimeLeft > 0.0):
-                driveSpeed  = self.drive_speed
-                rotateSpeed = self.rotate_speed
-                print "Move in progress for cmd %d. Status is %d driveSpeed %f rotateSpeed %f with %f sec left" % \
-                    (cmdType, self.cmdStatus, driveSpeed, rotateSpeed, self.moveTimeLeft)
-                self.moveTimeLeft = self.moveTimeLeft - secPerLoop 
-                twist = Twist()
-                twist.angular.z = 0.0
-                twist.linear.x  = 0.0
-                if (self.cmdStatus == FF_STATUS_CMD_IN_PROGRESS) and (self.moveTimeLeft > 0.0):
-                    if (cmdType == FF_CMD_DRIVE_FORWARD) or (cmdType == FF_CMD_DRIVE_REVERSE): 
-                        twist.linear.x   = driveSpeed
-                    if (cmdType == FF_CMD_ROTATE_LEFT) or (cmdType == FF_CMD_ROTATE_RIGHT):
-                        twist.angular.z  = rotateSpeed
-                else:
-                    if (cmdType == FF_CMD_DRIVE_FORWARD) or (cmdType == FF_CMD_DRIVE_REVERSE): 
-                        self.publishStatus1Str(cmdType, "Done", "Driving completed")
-                    elif (cmdType == FF_CMD_ROTATE_LEFT) or (cmdType == FF_CMD_ROTATE_RIGHT):
-                        self.publishStatus1Str(cmdType, "Done", "Rotation completed")
-                    self.cmdStatus       = FF_STATUS_CMD_IDLE
-                    self.cmdResult       = FF_RESULT_CMD_DONE_OK
-                    driveSpeed            = 0.0
-                    rotateSpeed           = 0.0
-
-                if self.debug_cmdvel == 0: 
-                    self.cmdvelPub.publish(twist)
-
-                rate.sleep()
-                continue
-
-            # if we do not have a fiducial to track we do the pause and skip follow logic
-            if self.target_fiducial == self.null_fiducial:
-                # print "IDLE: No fiducial to follow. " 
-                self.fid_in_view = 0
-                rate.sleep()
-                continue
-
-            # ------------------------------------------------------------------------------------
-            # At this time we have a fiducial to follow and we see it or not based on self.fid_in_view
-
-            # Calculate the error in the x and y directions
-            forward_error = self.fid_x - self.min_dist
-            lateral_error = self.fid_y
-
-            # Calculate the amount of turning needed towards the fiducial
-            # atan2 works for any point on a circle (as opposed to atan)
-            angular_error = math.atan2(self.fid_y, self.fid_x)
-
-            if self.fid_in_view == 1:
-                loops_since_fid_last_seen = 0
-            else:
-                loops_since_fid_last_seen += 1
-
-            if self.debug_follow > 0 and (loops_since_fid_last_seen % 10) == 0:
-                print "Fid: %s Dist %f in_view %d search %d missing count %d Errors: forward %f lateral %f angular %f" % \
-                    (self.target_fiducial, self.fid_x, self.fid_in_view, self.target_search, loops_since_fid_last_seen, \
-                    forward_error, lateral_error, degrees(angular_error))
-
-            # Decide on movement required from observations with or without fiducial being seen
-            if forward_error > self.max_dist:
-                print "Fiducial is too far away"
-                linSpeed = 0
-                angSpeed = 0
-
-            elif self.fid_in_view == 1:
-                # A fiducial was detected since last iteration of this loop
-
-                # Set the turning speed based on the angular error
-                # Add some damping based on the previous speed to smooth the motion 
-                #angSpeed = (angular_error * self.angular_rate) - (angSpeed / 2.0)
-                angSpeed = angular_error * self.angular_rate
-                # Make sure that the angular speed is within limits
-                if angSpeed < -self.max_angular_rate:
-                    angSpeed = -self.max_angular_rate
-                if angSpeed > self.max_angular_rate:
-                    angSpeed = self.max_angular_rate
-
-                # Set the forward speed based distance
-                linSpeed = forward_error * self.linear_rate
-                # Make sure that the angular speed is within limits
-                if linSpeed < -self.max_linear_rate:
-                    linSpeed = -self.max_linear_rate
-                if linSpeed > self.max_linear_rate:
-                    linSpeed = self.max_linear_rate
-
-                if self.debug_follow > 0:
-                    print "DistMovement: linSpeed %f angSpeed %f"  % (linSpeed, angSpeed)
-
-            else:
-                # A fiducial was NOT detected since last iteration of this loop
-
-                if loops_since_fid_last_seen < self.hysteresis_count:
-                    # Hysteresis, don't immediately stop if the fiducial is lost
-                    # Decrease the speed (assuming linear decay is <1)
-                    linSpeed *= self.linear_decay
-
-                # Try to refind fiducial continuously if we see it or rotate to search.
-                # We will only search for the fiducial if the target_search option is nonzero
-                elif self.target_search > 0 and loops_since_fid_last_seen < self.max_lost_count:
-                    # Stop moving forward
-                    linSpeed = 0
-                    # Keep turning in the same direction
-                    if angSpeed < 0:
-                        angSpeed = -self.lost_angular_rate
-                    elif angSpeed > 0:
-                        angSpeed = self.lost_angular_rate
-                    else:
-                        angSpeed = 0
-                    print "Try keep rotating to refind fiducial %s try# %d" % (self.target_fiducial, loops_since_fid_last_seen)
-
-                else:
-                    # go to zero movement 
-                    angSpeed = 0
-                    linSpeed = 0
-
-            if self.debug_follow > 1:
-                print "Speeds: linear %f angular %f" % (linSpeed, angSpeed)
-
-            # Create a Twist message from the velocities and publish it
-            # Avoid sending repeated zero speed commands, so teleop can work
-            zeroSpeed = (angSpeed == 0 and linSpeed == 0)
-            if not zeroSpeed:
-                self.suppressCmd = False
-
-            if (self.fid_in_view == 1) and (forward_error <= (self.min_dist * 1.005)) \
-                and (abs(linSpeed) < 0.01) and (abs(angSpeed) < 0.01):
-                # Here is logic to stop following if we think we are at the target
-                # and we see the target and action once found is set to stop following
-                fidDistanceX = self.fid_x 
-                fidRotationZ = self.fid_r 
-                if  (self.cmdStatus == FF_STATUS_CMD_IN_PROGRESS) and \
-                    (self.currentCommand == FF_CMD_FOLLOW_FIDUCIAL):
-                   print "Arrived at following fiducial %s  actionOnDone %d comment %s\n" % \
-                       (self.target_fiducial, self.actOnDone, self.cmd_comment)
-                   if (self.actOnDone == FF_ONDONE_DRIVE_ON_TOP) or (self.actOnDone == FF_ONDONE_ASSUME_POSE):
-                       # Roughly Drive over the fiducial 
-                       print "fiducial %s  is %f meters away at angle of %s radians " % \
-                           (self.target_fiducial, fidDistanceX, fidRotationZ)
-                       self.publishStatus2Str(cmdType, "AtFiducial", self.target_fiducial, "Drive to over the Fiducial")
-                       twist = Twist()
-                       twist.angular.z = 0.0
-                       twist.linear.x  = 0.1   # a rather slow speed for accuracy of simple movement
-                       # using slow speed drive over the fiducial
-                       self.moveTimeLeft = fidDistanceX / twist.linear.x
-                       print "Drive over fiducial for %f sec" % (self.moveTimeLeft)
-                       while self.moveTimeLeft > 0.0:
-                           self.moveTimeLeft = self.moveTimeLeft - secPerLoop 
-                           if self.debug_cmdvel == 0: 
-                               self.cmdvelPub.publish(twist)
-                           rate.sleep()
-
-                       self.publishStatus2Str(cmdType, "AtFiducial", self.target_fiducial, "Drove to location of fiducial") 
-
-                       if self.actOnDone == FF_ONDONE_ASSUME_POSE:
-                           # If assuming the pose then using slow speed rotate over the fiducial
-                           twist.linear.x  = 0.0
-                           twist.angular.z = 0.2     # a rather slow rotation
-                           if (fidRotationZ < 0.0):
-                               twist.angular.z = twist.angular.z * -1.0
-                           self.moveTimeLeft = abs(fidRotationZ / twist.angular.z)
-                           print "Rotate over fiducial for %f sec" % (self.moveTimeLeft)
-                           self.publishStatus2Str(cmdType, "AtFiducial", self.target_fiducial, "Rotate to pose of fiducial")
-                           while self.moveTimeLeft > 0.0:
-                               self.moveTimeLeft = self.moveTimeLeft - secPerLoop 
-                               if self.debug_cmdvel == 0: 
-                                   self.cmdvelPub.publish(twist)
-                               rate.sleep()
-                           self.target_fiducial = self.null_fiducial
-                           self.fid_in_view = 0
-                           self.publishStatus2Str(cmdType, "AtFiducial", self.target_fiducial, "Assumed pose of fiducial")
-                           self.cmdStatus = FF_STATUS_CMD_IDLE
-                           self.cmdResult = FF_RESULT_CMD_DONE_OK
-                       else:
-                           # This is the just drive on top and don't rotate situation
-                           self.cmdStatus = FF_STATUS_CMD_IDLE
-                           self.cmdResult = FF_RESULT_CMD_DONE_OK
-                           self.target_fiducial = self.null_fiducial
-                           self.fid_in_view = 0
-
-            if self.debug_follow > 1:
-                print "zero", zeroSpeed, self.suppressCmd
-            if not self.suppressCmd:
-                twist = Twist()
-                twist.angular.z = angSpeed
-                twist.linear.x = linSpeed
-                if self.debug_cmdvel == 0: 
-                    self.cmdvelPub.publish(twist)
-                if zeroSpeed:
-                    self.suppressCmd = True
-
-            # We already acted on the current fiducial
-            # self.fid_in_view = 0
             rate.sleep()
 
 
