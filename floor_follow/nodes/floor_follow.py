@@ -69,41 +69,42 @@ def degrees(r):
 # These includes exist in DoFollowCmd.action file but I am not able to sort out
 # how to import them so I duplicate them here with an easy change later to use the .action file
 #
-FF_CMD_NO_COMMAND=0           # No command defined
-FF_CMD_CLEAR_COMMANDS=1       # Clear all commands (good idea on start of activities)
-FF_CMD_WAIT_IN_SECONDS=2      # stop execution of commands for this delay in seconds
-FF_CMD_CLEAR_IN_PROGRESS=9    # Clear queue special internal command
+FF_CMD_NO_COMMAND=0             # No command defined
+FF_CMD_CLEAR_COMMANDS=1         # Clear all commands (good idea on start of activities)
+FF_CMD_WAIT_IN_SECONDS=2        # stop execution of commands for this delay in seconds
+FF_CMD_CLEAR_IN_PROGRESS=9      # Clear queue special internal command
 
 
-FF_CMD_FOLLOW_FIDUCIAL=21     # Approach a fiducial up to a preset distance
+FF_CMD_FOLLOW_FIDUCIAL=21       # Approach a fiducial up to a preset distance
 FF_CMD_STOP_MOVEMENT=22
-FF_CMD_DRIVE_FORWARD=23       # Drive forward for the specified time at the current drive_rate
-FF_CMD_DRIVE_REVERSE=24       # Drive reverse for the specified time at the current drive_rate
-FF_CMD_ROTATE_LEFT=25         # Rotate left   for the specified time at the current rotate_rate
-FF_CMD_ROTATE_RIGHT=26        # Rotate right  for the specified time at the current rotate_rate
-FF_CMD_SET_DRIVE_RATE=27      # Set drive_rate in M/sec for next drive command
-FF_CMD_SET_ROTATE_RATE=28     # Set the rotation rate for rotate commands in Rad/Sec
-FF_CMD_SET_MAX_LIN_RATE=29    # Set maximum linear rate in M/Sec used to approach the target fiducial
-FF_CMD_SET_MAX_ANG_RATE=30    # Set maximum angular rate in Rad/Sec used to rotate towards the target fiducial
+FF_CMD_DRIVE_FORWARD=23         # Drive forward for the specified time at the current drive_rate
+FF_CMD_DRIVE_REVERSE=24         # Drive reverse for the specified time at the current drive_rate
+FF_CMD_ROTATE_LEFT=25           # Rotate left   for the specified time at the current rotate_rate
+FF_CMD_ROTATE_RIGHT=26          # Rotate right  for the specified time at the current rotate_rate
+FF_CMD_SET_DRIVE_RATE=27        # Set drive_rate in M/sec for next drive command
+FF_CMD_SET_ROTATE_RATE=28       # Set the rotation rate for rotate commands in Rad/Sec
+FF_CMD_SET_MAX_LIN_RATE=29      # Set maximum linear rate in M/Sec used to approach the target fiducial
+FF_CMD_SET_MAX_ANG_RATE=30      # Set maximum angular rate in Rad/Sec used to rotate towards the target fiducial
+FF_CMD_GOTO_FIDUCIAL_ON_PATH=31 # Approach a fiducial where we expect to to go another in view right afterwards
 
 # Actions to take on command done
-FF_ONDONE_DO_NEXT_COMMAND=51  # Default is to go on to next command in the queue
-FF_ONDONE_ASSUME_POSE=52      # Once the fiducial is approached drive on top and rotate to pose of fiducial
-FF_ONDONE_DRIVE_ON_TOP=53     # Drive on top of the fiducial
+FF_ONDONE_DO_NEXT_COMMAND=51    # Default is to go on to next command in the queue
+FF_ONDONE_ASSUME_POSE=52        # Once the fiducial is approached drive on top and rotate to pose of fiducial
+FF_ONDONE_DRIVE_ON_TOP=53       # Drive on top of the fiducial
 
 # Results of last operation
-FF_RESULT_CMD_DONE_OK=0       # Last command completed ok OR no command done yet     
-FF_RESULT_CMD_DONE_ERROR=99   # Last command completed ok OR no command done yet     
+FF_RESULT_CMD_DONE_OK=0         # Last command completed ok OR no command done yet     
+FF_RESULT_CMD_DONE_ERROR=99     # Last command completed ok OR no command done yet     
 
 # Status and states for when commands are in progress or we are idle. Errors are negative
-FF_STATUS_CMD_NO_ACTION=0     # No action required of the type this handler performs 
-FF_STATUS_CMD_DONE_OK=1       # The command was executed successfully
-FF_STATUS_CMD_IDLE=100        # No command is being executed
-FF_STATUS_CMD_IN_PROGRESS=102 # A command is in progress (busy)
-FF_STATUS_CMD_ERROR=-1        # An error happened in the command execution
-FF_STATUS_CMD_FID_NOT_SEEN=-5 # If a fiducial is not seen we have to error some handler(s)
-FF_STATUS_CMD_FID_TOO_FAR=-6  # The fiducial is too far away to process this command
-FF_STATUS_CMD_TIMEOUT=-9      # A timeout per the passed in or worse case timeout
+FF_STATUS_CMD_NO_ACTION=0       # No action required of the type this handler performs 
+FF_STATUS_CMD_DONE_OK=1         # The command was executed successfully
+FF_STATUS_CMD_IDLE=100          # No command is being executed
+FF_STATUS_CMD_IN_PROGRESS=102   # A command is in progress (busy)
+FF_STATUS_CMD_ERROR=-1          # An error happened in the command execution
+FF_STATUS_CMD_FID_NOT_SEEN=-5   # If a fiducial is not seen we have to error some handler(s)
+FF_STATUS_CMD_FID_TOO_FAR=-6    # The fiducial is too far away to process this command
+FF_STATUS_CMD_TIMEOUT=-9        # A timeout per the passed in or worse case timeout
 
 
 class DoFloorFollowServer:
@@ -371,6 +372,7 @@ class DoFloorFollowServer:
             self.actOnDone       = actOnDone      # required parameter for a follow
             self.fid_in_view     = 0              # force at least one target acquisition
             self.publishStatus1Str(cmdType, "SetNewFiducial", self.target_fiducial)
+            print "Set new follow fiducial to %s " % (self.target_fiducial)
 
         elif cmdType == FF_CMD_WAIT_IN_SECONDS:
             # Wait before going on to next command
@@ -483,6 +485,7 @@ class DoFloorFollowServer:
             secInProgress += secPerLoop
             if secInProgress > timeout:
                 return FF_STATUS_CMD_TIMEOUT, "Timeout in the drive command!"
+            r.sleep()
 
         # After the drive is done wrap thing up
         if (cmdType == FF_CMD_DRIVE_FORWARD) or (cmdType == FF_CMD_DRIVE_REVERSE): 
@@ -502,12 +505,17 @@ class DoFloorFollowServer:
     # be more readable.
     # This should be called only if we have the fiducial to follow already in view per  self.fid_in_view
     #
-    def handle_approachFiducial(target_fiducial, target_search):
+    def handle_approachFiducial(self, target_fiducial, target_search, approachPct):
         # ------------------------------------------------------------------------------------
+        loops_since_fid_last_seen = 0
 
         # Calculate the error in the x and y directions
         forward_error = self.fid_x - self.min_dist
         lateral_error = self.fid_y
+        linSpeed = 0.0
+        angSpeed = 0.0
+        loops_since_fid_last_seen = 0
+
 
         # Calculate the amount of turning needed towards the fiducial
         # atan2 works for any point on a circle (as opposed to atan)
@@ -550,6 +558,11 @@ class DoFloorFollowServer:
 
             if self.debug_follow > 0:
                 print "DistMovement: linSpeed %f angSpeed %f"  % (linSpeed, angSpeed)
+            twist = Twist()
+            twist.linear.x  = linSpeed
+            twist.angular.z = angSpeed
+            if self.debug_cmdvel == 0: 
+                self.cmdvelPub.publish(twist)
 
         else:
             # A fiducial was NOT detected since last iteration of this loop
@@ -582,12 +595,13 @@ class DoFloorFollowServer:
             print "Speeds: linear %f angular %f" % (linSpeed, angSpeed)
 
         # Create a Twist message from the velocities and publish it
+
         # Avoid sending repeated zero speed commands, so teleop can work
         zeroSpeed = (angSpeed == 0 and linSpeed == 0)
         if not zeroSpeed:
             self.suppressCmd = False
 
-        if (self.fid_in_view == 1) and (forward_error <= (self.min_dist * 1.005)) \
+        if (self.fid_in_view == 1) and (forward_error <= (self.min_dist * approachPct)) \
             and (abs(linSpeed) < 0.01) and (abs(angSpeed) < 0.01):
             # Here is logic to stop following if we think we are at the target
             # and we see the target and action once found is set to stop following
@@ -639,6 +653,7 @@ class DoFloorFollowServer:
 
             if self.debug_follow > 1:
                 print "zero", zeroSpeed, self.suppressCmd
+
             if not self.suppressCmd:
                 twist = Twist()
                 twist.angular.z = angSpeed
@@ -756,9 +771,10 @@ class DoFloorFollowServer:
         secInProgress = 0.0
         timeout = 30.0
         secPerLoop = 1.0 / self.loop_hz 
-        r = rospy.Rate(loopRate)
+        r = rospy.Rate(self.loop_hz)
+        print "Approach fiducial %s " % (self.target_fiducial)
         while retCode == FF_STATUS_CMD_IN_PROGRESS:
-            retCode,retString  = self.handle_approachFiducial(self.target_fiducial, self.target_search)
+            retCode,retString  = self.handle_approachFiducial(self.target_fiducial, self.target_search, 1.02)
             if (retCode == FF_STATUS_CMD_DONE_OK):
                 self.server.set_succeeded(self._result)
                 self.cmdStatus = FF_STATUS_CMD_IDLE
@@ -775,6 +791,7 @@ class DoFloorFollowServer:
                 print "Approach of fiducial %s timeout." % (self.target_fiducial)
                 self.server.set_aborted(self._result)
                 return 
+            r.sleep()
 
         # Other return codes indicate this handler was not required
 
@@ -801,10 +818,6 @@ class DoFloorFollowServer:
         self.numParam1  = 0
         self.numParam2  = 0
         self.cmdComment = ""
-
-        linSpeed = 0.0
-        angSpeed = 0.0
-        loops_since_fid_last_seen = 0
 
         cmdType    = 0
         cmdParam1  = 0
