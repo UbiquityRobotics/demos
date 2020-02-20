@@ -9,34 +9,44 @@ string  comment
 
 # Command Types
 
-int32  FF_CMD_CLEAR_COMMANDS=1       # Clear all commands (good idea on start of activities)
-int32  FF_CMD_WAIT_IN_SECONDS=2      # stop execution of commands for this delay in seconds
-int32  FF_CMD_CLEAR_IN_PROGRESS=9    # Clear queue special internal command
+int32  FF_CMD_CLEAR_COMMANDS=1         # Clear all commands (good idea on start of activities)
+int32  FF_CMD_WAIT_IN_SECONDS=2        # stop execution of commands for this delay in seconds
+int32  FF_CMD_CLEAR_IN_PROGRESS=9      # Clear queue special internal command
 
-int32  FF_CMD_FOLLOW_FIDUCIAL=21     # Approach a fiducial up to a preset distance
+int32  FF_CMD_FOLLOW_FIDUCIAL=21       # Approach a fiducial up to a preset distance
 int32  FF_CMD_STOP_MOVEMENT=22
-int32  FF_CMD_DRIVE_FORWARD=23       # Drive forward for the specified time at the current drive_rate
-int32  FF_CMD_DRIVE_REVERSE=24       # Drive reverse for the specified time at the current drive_rate
-int32  FF_CMD_ROTATE_LEFT=25         # Rotate left   for the specified time at the current rotate_rate
-int32  FF_CMD_ROTATE_RIGHT=26        # Rotate right  for the specified time at the current rotate_rate
-int32  FF_CMD_SET_DRIVE_RATE=27      # Set drive_rate in M/sec for next drive command
-int32  FF_CMD_SET_ROTATE_RATE=28     # Set the rotation rate for rotate commands in Rad/Sec
-int32  FF_CMD_SET_MAX_LIN_RATE=29    # Set maximum linear rate in M/Sec used to approach the target fiducial
-int32  FF_CMD_SET_MAX_ANG_RATE=30    # Set maximum angular rate in Rad/Sec used to rotate towards the target fiducial
+int32  FF_CMD_DRIVE_FORWARD=23         # Drive forward for the specified time at the current drive_rate
+int32  FF_CMD_DRIVE_REVERSE=24         # Drive reverse for the specified time at the current drive_rate
+int32  FF_CMD_ROTATE_LEFT=25           # Rotate left   for the specified time at the current rotate_rate
+int32  FF_CMD_ROTATE_RIGHT=26          # Rotate right  for the specified time at the current rotate_rate
+int32  FF_CMD_SET_DRIVE_RATE=27        # Set drive_rate in M/sec for next drive command
+int32  FF_CMD_SET_ROTATE_RATE=28       # Set the rotation rate for rotate commands in Rad/Sec
+int32  FF_CMD_SET_MAX_LIN_RATE=29      # Set maximum linear rate in M/Sec used to approach the target fiducial
+int32  FF_CMD_SET_MAX_ANG_RATE=30      # Set maximum angular rate in Rad/Sec used to rotate towards the target fiducial
+int32  FF_CMD_GOTO_FIDUCIAL_ON_PATH=31 # Set maximum angular rate in Rad/Sec used to rotate towards the target fiducial
+int32  FF_CMD_IS_FIDUCIAL_SEEN=32      # Query if a given fiducial is detected in the camera at this time
 
 # Actions to take on command done
-int32  FF_ONDONE_DO_NEXT_COMMAND=51  # Default is to go on to next command in the queue
-int32  FF_ONDONE_ASSUME_POSE=52      # Once the fiducial is approached drive on top and rotate to pose of fiducial
-int32  FF_ONDONE_DRIVE_ON_TOP=53     # Drive on top of the fiducial
+int32  FF_ONDONE_DO_NEXT_COMMAND=51    # Default is to go on to next command in the queue
+int32  FF_ONDONE_ASSUME_POSE=52        # Once the fiducial is approached drive on top and rotate to pose of fiducial
+int32  FF_ONDONE_DRIVE_ON_TOP=53       # Drive on top of the fiducial
 
 # Results of last operation
-int32 FF_RESULT_CMD_DONE_OK=0        # Last command completed ok OR no command done yet
-int32 FF_RESULT_CMD_DONE_ERROR=99    # Last command completed ok OR no command done yet
+int32 FF_RESULT_CMD_DONE_OK=0          # Last command completed ok OR no command done yet
+int32 FF_RESULT_CMD_DONE_ERROR=99      # Last command completed ok OR no command done yet
 
 # Status and states for when commands are in progress or we are idle
-int32 FF_STATUS_CMD_IDLE=100         # No command is being executed
-int32 FF_STATUS_CMD_IN_PROGRESS=101  # A command is in progress (busy)
-
+int32 FF_STATUS_CMD_NO_ACTION=0        # No action required of the type this handler performs
+int32 FF_STATUS_CMD_DONE_OK=1          # The command was executed successfully
+int32 FF_STATUS_CMD_IDLE=100           # No command is being executed
+int32 FF_STATUS_CMD_IN_PROGRESS=102    # A command is in progress (busy)
+int32 FF_STATUS_CMD_ERROR=-1           # An error happened in the command execution
+int32 FF_STATUS_CMD_INVALID=-2         # A command in a goal was invalid or not handled yet
+int32 FF_STATUS_CMD_FID_NOT_SEEN=-4    # A fiducial is not seen we have to error some handler(s)
+int32 FF_STATUS_CMD_FID_WAS_LOST=-5    # A fiducial was seen at start of approach but was lost to view later
+int32 FF_STATUS_CMD_FID_TOO_FAR=-6     # The fiducial is too far away to process this command
+int32 FF_STATUS_CMD_PARAM_RANGE=-7     # A parameter was set to invalid range
+int32 FF_STATUS_CMD_TIMEOUT=-9         # A timeout per the passed in or worse case timeout
 
 ---
 # define the result

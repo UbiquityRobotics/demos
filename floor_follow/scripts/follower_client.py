@@ -47,42 +47,6 @@ import numpy
 
 from follow_actions.msg import DoFollowCmdAction, DoFollowCmdGoal
 
-#
-# Define commands and replies for the actionlib goals and results and so on
-#
-# These includes exist in DoFollowCmd.action file but I am not able to sort out
-# how to import them so I duplicate them here with an easy change later to use the .action file
-#
-FF_CMD_CLEAR_COMMANDS=1         # Clear all commands (good idea on start of activities)
-FF_CMD_WAIT_IN_SECONDS=2        # stop execution of commands for this delay in seconds
-FF_CMD_CLEAR_IN_PROGRESS=9      # Clear queue special internal command
-
-
-FF_CMD_FOLLOW_FIDUCIAL=21       # Go up to a fiducial up to a preset distance
-FF_CMD_STOP_MOVEMENT=22         # Stop movement
-FF_CMD_DRIVE_FORWARD=23         # Drive forward for the specified time at the current drive_rate
-FF_CMD_DRIVE_REVERSE=24         # Drive reverse for the specified time at the current drive_rate
-FF_CMD_ROTATE_LEFT=25           # Rotate left   for the specified time at the current rotate_rate
-FF_CMD_ROTATE_RIGHT=26          # Rotate right  for the specified time at the current rotate_rate
-FF_CMD_SET_DRIVE_RATE=27        # Set drive_rate in M/sec for next drive command
-FF_CMD_SET_ROTATE_RATE=28       # Set the rotation rate for rotate commands in Rad/Sec
-FF_CMD_SET_MAX_LIN_RATE=29      # Set maximum linear rate in M/Sec used to approach the target fiducial
-FF_CMD_SET_MAX_ANG_RATE=30      # Set maximum angular rate in Rad/Sec used to rotate towards the target fiducial
-FF_CMD_GOTO_FIDUCIAL_ON_PATH=31 # Approach a fiducial at a good speed assuming another will be next
-
-# Actions to take on command done
-FF_ONDONE_DO_NEXT_COMMAND=51    # Default is to go on to next command in the queue
-FF_ONDONE_ASSUME_POSE=52        # Once the fiducial is approached drive on top and rotate to pose of fiducial
-FF_ONDONE_DRIVE_ON_TOP=53       # Drive on top of the fiducial
-
-# Results of last operation
-FF_RESULT_CMD_DONE_OK=0         # Last command completed ok OR no command done yet
-FF_RESULT_CMD_DONE_ERROR=99     # Last command completed ok OR no command done yet
-
-# Status and states for when commands are in progress or we are idle
-FF_STATUS_CMD_IDLE=100          # No command is being executed
-FF_STATUS_CMD_IN_PROGRESS=101   # A command is in progress (busy)
-
 
 class Controller:
     """
@@ -156,6 +120,9 @@ class Controller:
         cmdParam2  = 0
         cmdString1 = "none"
  
+        # get access to constants of this goal type
+        goal = DoFollowCmdGoal()
+ 
         print "ROS publisher publishing commands to topic /follower_commands"
 
         # Fire off the commands we want to send.  THIS is the meat of this script's purpose
@@ -164,31 +131,28 @@ class Controller:
 
         # First optionally configure parameters we want to be active for commands
         #self.publishFollowerCommand(FF_CMD_CLEAR_COMMANDS,  0 , " ", 0.0, "Clear all pending commands")
-        #self.publishFollowerCommand(FF_CMD_SET_MAX_LIN_RATE, 0, " ", 0.3, "Set max linear approach rate")
-        #self.publishFollowerCommand(FF_CMD_SET_DRIVE_RATE,   0, " ", 0.15, "Set drive rate")
-        #self.publishFollowerCommand(FF_CMD_SET_ROTATE_RATE, 0, " ", 0.3, "Set rotate rate")
-        self.publishFollowerCommand(FF_CMD_WAIT_IN_SECONDS, 0, " ", 2.0, "Wait a few sec ")
+        self.publishFollowerCommand(goal.FF_CMD_SET_MAX_LIN_RATE, goal.FF_ONDONE_DO_NEXT_COMMAND, " ", 0.3, "Set max lin rate")
+        self.publishFollowerCommand(goal.FF_CMD_SET_DRIVE_RATE,   goal.FF_ONDONE_DO_NEXT_COMMAND, " ", 0.15, "Set drive rate")
+        self.publishFollowerCommand(goal.FF_CMD_SET_ROTATE_RATE,  goal.FF_ONDONE_DO_NEXT_COMMAND, " ", 0.3, "Set rotate rate")
+
+        # query if we can see a given fiducial at this time
+        self.publishFollowerCommand(goal.FF_CMD_IS_FIDUCIAL_SEEN, goal.FF_ONDONE_DO_NEXT_COMMAND, "fid104", 0.0, "Do we see this fiducial")
+        self.publishFollowerCommand(goal.FF_CMD_IS_FIDUCIAL_SEEN, goal.FF_ONDONE_DO_NEXT_COMMAND, "fid106", 0.0, "Do we see this fiducial")
 
         # Next we show how to follow a few fiducials on the floor
-        #self.publishFollowerCommand(FF_CMD_DRIVE_FORWARD,    0, " ", 0.3, "Drive forward very short time at DriveRate")
-        #self.publishFollowerCommand(FF_CMD_WAIT_IN_SECONDS, 0, " ", 2.0, "Wait a few sec ")
-        #self.publishFollowerCommand(FF_CMD_DRIVE_REVERSE,    0, " ", 0.3, "Drive reverse very short time at DriveRate")
-        #self.publishFollowerCommand(FF_CMD_WAIT_IN_SECONDS, 0, " ", 2.0, "Wait a few sec ")
-        #self.publishFollowerCommand(FF_CMD_ROTATE_RIGHT,     0, " ", 0.7, "Rotate right 1 sec at RotateRate")
-        #self.publishFollowerCommand(FF_CMD_WAIT_IN_SECONDS, 0, " ", 2.0, "Wait a few sec ")
-        #self.publishFollowerCommand(FF_CMD_ROTATE_LEFT,      0, " ", 0.7, "Rotate left  2 sec at RotateRate")
-        #self.publishFollowerCommand(FF_CMD_DRIVE_FORWARD,    0, " ", 0.4, "Drive forward 1 sec at DriveRate")
-        #self.publishFollowerCommand(FF_CMD_ROTATE_RIGHT,    0, " ", 1.0, "Rotate right 1 sec at RotateRate")
-        self.publishFollowerCommand(FF_CMD_FOLLOW_FIDUCIAL,  FF_ONDONE_DO_NEXT_COMMAND, "fid106", 0.0, "Follow this fiducial")
-        self.publishFollowerCommand(FF_CMD_FOLLOW_FIDUCIAL,  FF_ONDONE_DO_NEXT_COMMAND, "fid102", 0.0, "Follow this fiducial")
-        #self.publishFollowerCommand(FF_CMD_FOLLOW_FIDUCIAL, FF_ONDONE_DRIVE_ON_TOP, "fid101", 0.0, "Follow this fiducial")
-        #self.publishFollowerCommand(FF_CMD_FOLLOW_FIDUCIAL,  FF_ONDONE_DO_NEXT_COMMAND, "fid105", 0.0, "Follow this fiducial")
-        #self.publishFollowerCommand(FF_CMD_FOLLOW_FIDUCIAL,  FF_ONDONE_DRIVE_ON_TOP, "fid105", 0.0, "drive over fiducial")
-        #self.publishFollowerCommand(FF_CMD_FOLLOW_FIDUCIAL, FF_ONDONE_ASSUME_POSE, "fid103", 0.0, "Follow fiducial and match pose")
-        #self.publishFollowerCommand(FF_CMD_FOLLOW_FIDUCIAL,  FF_ONDONE_DO_NEXT_COMMAND, "fid106", 0.0, "Follow this fiducial")
-        #self.publishFollowerCommand(FF_CMD_FOLLOW_FIDUCIAL,  FF_ONDONE_DRIVE_ON_TOP, "fid106", 0.0, "drive over fiducial")
-        #self.publishFollowerCommand(FF_CMD_ROTATE_RIGHT,     0, " ", 1.0, "Rotate right sec at RotateRate")
-        #self.publishFollowerCommand(FF_CMD_FOLLOW_FIDUCIAL,  FF_ONDONE_DO_NEXT_COMMAND, "fid107", 0.0, "Follow this fiducial")
+        self.publishFollowerCommand(goal.FF_CMD_DRIVE_REVERSE,   goal.FF_ONDONE_DO_NEXT_COMMAND, " ", 0.4, "Drive reverse ")
+        self.publishFollowerCommand(goal.FF_CMD_WAIT_IN_SECONDS, goal.FF_ONDONE_DO_NEXT_COMMAND, " ", 1.0, "Wait a few sec ")
+        self.publishFollowerCommand(goal.FF_CMD_DRIVE_FORWARD,   goal.FF_ONDONE_DO_NEXT_COMMAND, " ", 0.3, "Drive forward ")
+        self.publishFollowerCommand(goal.FF_CMD_WAIT_IN_SECONDS, goal.FF_ONDONE_DO_NEXT_COMMAND, " ", 1.0, "Wait a few sec ")
+        self.publishFollowerCommand(goal.FF_CMD_DRIVE_REVERSE,   goal.FF_ONDONE_DO_NEXT_COMMAND, " ", 0.3, "Drive reverse ")
+        self.publishFollowerCommand(goal.FF_CMD_WAIT_IN_SECONDS, goal.FF_ONDONE_DO_NEXT_COMMAND, " ", 1.0, "Wait a few sec ")
+        self.publishFollowerCommand(goal.FF_CMD_ROTATE_LEFT,     goal.FF_ONDONE_DO_NEXT_COMMAND, " ", 0.7, "Rotate left ")
+        self.publishFollowerCommand(goal.FF_CMD_WAIT_IN_SECONDS, goal.FF_ONDONE_DO_NEXT_COMMAND, " ", 1.0, "Wait a few sec ")
+        self.publishFollowerCommand(goal.FF_CMD_ROTATE_RIGHT,    goal.FF_ONDONE_DO_NEXT_COMMAND, " ", 0.7, "Rotate right")
+        self.publishFollowerCommand(goal.FF_CMD_WAIT_IN_SECONDS, goal.FF_ONDONE_DO_NEXT_COMMAND, " ", 1.0, "Wait a few sec ")
+        self.publishFollowerCommand(goal.FF_CMD_FOLLOW_FIDUCIAL, goal.FF_ONDONE_DO_NEXT_COMMAND, "fid106", 0.0, "Follow a fiducial")
+        self.publishFollowerCommand(goal.FF_CMD_WAIT_IN_SECONDS, goal.FF_ONDONE_DO_NEXT_COMMAND, " ", 1.0, "Wait a few sec ")
+        self.publishFollowerCommand(goal.FF_CMD_FOLLOW_FIDUCIAL, goal.FF_ONDONE_DRIVE_ON_TOP, "fid102", 0.0, "Follow this fiducial")
 
         print "Commands sent "
 
