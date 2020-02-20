@@ -1,17 +1,23 @@
 
 
-# Nodes
+# The Floor Follow Actionlib Server
 
-## follow.py
+## The floor_follow.py Actionlib Server
 
-The fiducial_follow demo uses [aruco_detect](http://wiki.ros.org/aruco_detect)
-to detect fiducials in the image feed from a camera.  Default usage will follow the default #49 `target_fiducial`. When the `target_fiducial` is in view or search for it if not found which was the only mode of the original version of fiducial follow demo. 
+The floor follow server is meant to be controled by a client script or program that uses the ROS actionlib interface.  The server is sent actionlib goals and processes one at a time.  The client issues a goal and awaits a result with status.
 
-An optional yet flexible interface has been added to greatly increase the possible usage of follow.py to respond to commands on an inbound ros topic and issue status on a second topic.  The new mode allows for programable on the fly following of pre placed fiducials on the floor or walls as well as very simple movement commands that may be required to keep the next fiducial in view prior to going to that fiducial.
+The floor_follow server demo uses [aruco_detect](http://wiki.ros.org/aruco_detect)
+to detect fiducials in the image feed from a camera.  Default Magni configuration will require a downward facing camera that can see floor fiducials in front of the robot.
+
+The ROS actionlib SimpleActionServer defines the interfaces and for reference please see explanations on the ROS doc for [actionlib_tutorials](http://wiki.ros.org/actionlib_tutorials)
+
+The floor follow server allows for programable operations to be requested by a client that interact with pre placed fiducials on the floor as well as allow for simple movement commands that may be required to keep the next fiducial in view if turns are required.
 This new mode is an alternative to our full room navigation methods which are in general more complex but also far more exact in navigation of a work space that uses ceiling fiducial map. 
 
-There is an interface to follow.py that allows control using messages on topic `/follower_commands`.  A list of messages can include new setup parameters as well as fiducials for the robot to follow or act upon. These commands can be queued in the follow.py app or can be received as the robot progresses and the user app detects status that then requires a new command to be issued to the robot. 
-The status for completed commands comes out on topic /follower_status.  Included in the commands are simple movement commands that allow the robot to drive or turn which could be useful to find the next fiducial if it is out of view after the prior fiducial has been found.  This also allows use of different paths through floor based fiducials based on the directions in the commands to turn towards the next fiducial target.
+There is an actionlib interface defined in the follow_actions package in the DoFollowCmd.action file that allows control using an actionlib client.  A list of messages can include new setup parameters as well as fiducials for the robot to follow or act upon. 
+
+The floor_follow.py program implementes a ROS node for this actionlib server.
+An example program using many of the commands this node will process can be found in the scripts folder in the floor_follow scripts folder where you will find the client program follower_client.py
 
 
 ### Paramaters
@@ -33,29 +39,24 @@ The status for completed commands comes out on topic /follower_status.  Included
 
 ### Subscriptions
 
-* `fiducial_transforms` (fiducial_msgs/FiducialTransformArray): Listen for locations of observed fiducials
-* `follower_commands` (custom_msgs/FollowerCommand): Accept commands to process in order of reception
-
-### Example usage for simple single fiducial following
-For the simple legacy fiducial follow mode a single aruco fiducial of size 140mm on edge of the black pattern that is number 49 is used.
-Prepare such a fiducial and place it where the robot can see it with the camera then start the program.
-
-    roslaunch magni_demos fiducial_follow.launch
+* `fiducial_transforms` The node listens for fiducial poses created by the aruco detect node
 
 ## Following fiducials On The Floor Using Commands
 
-The follow.py script can act on commands sent to it using ros topic /follower_commands.
-These commands arrive in a general message, FollowerCommand, upon a well known topic of /follower_commands that is monitored by the follower script. 
+The floor_follow.py script can act on commands sent to it using actionlib interface DoFollowCmdAction  goals
+These commands arrive as an actionlib goal and start being processed in the executeAction callback in the node main script, floor_follow.py
 
-The script can be issued a list of commands so the robot can follow a trail of fiducials on the floor.  For optimal floor fiducial following there are some configuration changes suggested where the config files will be present starting from a path of /opt/ros/kinetic/share/raspicam_node for the case of ROS Kinetic.  Floor fiducials of 100mm size are a better size for this mode of operation because they end up very close to the camera and we want the robot to drive over the fiducials generally. 
+The script can be issued a list of commands so the robot can follow a trail of fiducials on the floor.  For optimal floor fiducial following there are some configuration changes needed where the config files will be present starting from a path of /opt/ros/kinetic/share/raspicam_node for the case of ROS Kinetic.  Floor fiducials of 110mm size are a better size for this mode of operation because they end up very close to the camera and we want the robot to drive over the fiducials generally. 
 
-An example launch file that does some of the things needed can be run as follows.
+The ROS launch file that does some of the things needed can be run as follows.
 
     roslaunch magni_demos fiducial_floor_follow.launch
 
 ### The following of fiducials on the floor is intended after Config Changes
 The camera should be mounted in what we will call and release as the 'downward' mounting.
 We hope to support this on an image as soon as early 2020. Contact us on the forum if you need this earlier.
+
+At this time in early 2020 the default raspicam pose of 'downward' is for a camera located 55cm above the floor on a tall mast on the front left side of the Magni which will be pointing downward at 45 degrees.    This pose can be changed but it is a complex matter not presented at this time.
 
 An updated version of the magni.urdf.xacro file and modification of /etc/ubiquity/robot.yaml to specify raspicam pose as `downward` would be required and ideally higher resolution raspicam config and launch files would be best.  We hope to support all of these things for floor fiducial following in our next raspberry Pi image perhaps early in 2020.
 
@@ -67,66 +68,60 @@ The camera resolution set in our launch for this mode will be high such as 1280x
 * The launch file can specify other argument suitable for other drive and rotate needs.
 
 
-### A very simple example client that issues and listens to status
+### A very actionlib example client that issues and listens to status
 
-As an example we have a very simple example called follower_client.py in the scripts folder.
+As an example we have a very simple example called follower_client.py in the scripts folder under the floor_follow folder.
 Take a look at this to see how to send commands and receive status.   This is simple starting point for your own node if you desire.
 Modify the script perhaps first to just drive a little then print and place your own fiducials and have it follow them in some order you define.
 Keep in mind that the basic rotate and perhaps the basic drive commands may have to be used after ariving at one fiducial in order to point the robot in the general direction where it can see the next fiducial.
-You would first run the fiducial_follow node and then the command below would start this sample client node
+You would first run the fiducial_follow node as already shown above on this page and then the command below would start this sample client node
 
     python ./follower_client.py 
 
-#### The general purpose command message
+#### The Actionlib Goal Message
 
-The general message has these fields which are standard ROS format types, mostly just strings.
-The messages are in demos/custom_messages so that they can stand alone for other apps or nodes
+The goal that this node responts to is define in follow_actions folder under subfolder action in file DoFollowCmd.action.  Any changes to this .action file require a catkin_make.   The goal has these fields
 
 * `commandType`  String such as `RotateRight` or `FollowFiducial` to set next target
 * `actionOnDone`  String that Tells what will be done after the command.  This is specific to the command used
-* `strParam1`  String parameter for commands that need a string such as the next fiducial to follow
-* `strParam2`  Second string parameter if required by the command
 * `numParam1`  Floating point numeric parameter used if required by the command
 * `numParam2`  Second floating point numeric parameter used if required by the command
+* `strParam1`  String parameter for commands that need a string such as the next fiducial to follow
 * `comment`  This string will show up in the status for the command and could be used for feedback to the sender
 
 The above command is in a general form.  Below are the command types to the left and we indicate which parameter(s) are used for the command.  Any user inputs can be in `comment` and a user may use this for triggering his app or just readable status message.
 
-It is important to keep in mind that sending these commands adds them to a queue.  So if 3 commands are sent right away for the FiducialFollow commandType the 3 will be sought out and driven to one at a time.  All commands are processed in first in first executed order.  
+All commands are processed one at a time by the actionlib server implemented in floor_follow.py
 
-#### The commandTypes To The Fiducial Follow node
+#### The commandTypes To The floor follow server
 
-* `FollowFiducial` The `strParam1` string will be the next fiducial to be followed such as `fid101`.  The `actionOnDone` is generally assumed to be just to move on to do the next command. You may specify 'DriveOnTop' for actionOnDone so the robot drives itself over the fiducial.  You may specify 'AssumePose' for actionOnDone so the robot drives over then rotates to the pose of the fiducial.  You may specify for actionOnDone to `KeepFollowing` so the robot continues to follow this fiducial just like the legacy fiducial follow mode.    
-* `SetMaxLinRate`  The numParam1 parameter is used as the new `max_linear_rate` for finding fiducials. We limit this between very slow to about 1.2 meters per second.
-* `SetMaxAngRate`  The numParam1 parameter is used as the new `max_angular_rate` for following fiducials. We limit this between very slow to about 2.0 meters per second.
-* `DriveForward`  The numParam1 parameter is the time in seconds to drive straight forward at the rate set using the `drive_rate` which was set as a parameter or modified most recently using the SetDriveRate command
+To simplify this table I will leave off the prefix of FF_CMD_ used in each command type  seen in full in the DoFollowCmd.action file
 
-* `DriveReverse`  The numParam1 parameter is the time in seconds to drive straight backwards at the rate set using the `drive_rate` which was set as a parameter or modified most recently using the SetDriveRate command
+* `DRIVE_REVERSE`  The numParam1 parameter is the time in seconds to drive straight backwards at the rate set using the `drive_rate` which was set as a parameter or modified most recently using the SetDriveRate command
 
-* `SetDriveRate`  The numParam1 parameter is used as the new `drive_rate` for drive commands. We limit this between very slow to about 1.2 meters per second.
+* `ROTATE_RIGHT`  The numParam1 parameter is the time in seconds to rotate to the right at the rate set using the `rotate_rate` which was set as a parameter or modified most recently using the SetRotateRate command
 
-* `RotateRight`  The numParam1 parameter is the time in seconds to rotate to the right at the rate set using the `rotate_rate` which was set as a parameter or modified most recently using the SetRotateRate command
+* `ROTATE_LEFT`  The numParam1 parameter is the time in seconds to rotate to the left at the rate set using the `rotate_rate` which was set as a parameter or modified most recently using the SetRotateRate command
 
-* `RotateLeft`  The numParam1 parameter is the time in seconds to rotate to the left at the rate set using the `rotate_rate` which was set as a parameter or modified most recently using the SetRotateRate command
+* `FOLLOW_FIDUCIAL` The `strParam1` string will be the next fiducial to be followed such as `fid101`.  The `actionOnDone` is generally assumed to be just to move on to do the next command. You may specify 'DriveOnTop' for actionOnDone so the robot drives itself over the fiducial.  You may specify 'AssumePose' for actionOnDone so the robot drives over then rotates to the pose of the fiducial.  You may specify for actionOnDone to `KeepFollowing` so the robot continues to follow this fiducial just like the legacy fiducial follow mode.    
 
-* `SetRotateRate`  The numParam1 parameter is used as the new `rotate_rate` for rotate commands. We limit this between very slow to about 3.2 meters per second.
+* `DRIVE_FORWARD`  The numParam1 parameter is the time in seconds to drive straight forward at the rate set using the `drive_rate` which was set as a parameter or modified most recently using the SetDriveRate command
 
-* `ClearCommands`  Typically used to flush out any commands not yet executed but queued from prior commands
+* `SET_MAX_LIN_RATE`  The numParam1 parameter is used as the new `max_linear_rate` for finding fiducials. We limit this between very slow to about 1.2 meters per second.
 
-* `ClearInProgress`  RESERVED command type to stop the robot from any current movement command.  FUTURE PLAN
+* `SET_MAX_ANG_RATE`  The numParam1 parameter is used as the new `max_angular_rate` for following fiducials. We limit this between very slow to about 2.0 meters per second.
 
-* `StopMovement`  RESERVED command to stop the robot from any current movement command.   FUTURE PLAN
+* `SET_DRIVE_RATE`  The numParam1 parameter is used as the new `drive_rate` for drive commands. We limit this between very slow to about 1.2 meters per second.
 
-#### The Status Messages published by Fiducial Follow node
+* `SET_ROTATE_RATE`  The numParam1 parameter is used as the new `rotate_rate` for rotate commands. We limit this between very slow to about 3.2 meters per second.
 
-The node will publish status messages which may be valuable for a client node.
-At this time these messages are not greatly thought out for some 'grand scheme' as that depends on a users specific needs.
+* `CLEAR_COMMANDS`  This is a depreciated command and only to be used if we ever re-implement a command queue.  It was used in an earlier architecture
+
+* `STOP_MOVEMENT`  RESERVED command to stop the robot from any current movement command.   FUTURE PLAN
+
+#### The Status Result  
+
+The node will result in a status result which may be valuable for a client node.
 Generally we send one status as it is the start of that command to be acted upon and then send a status on completion.
+This is to be documented in the future
 
-* `commandType`  String that normally shows the command for which this status applies.
-* `statusState`  String that indicates something about the state such as a new command starting to be run or is Done.
-* `string1`  String that often states the fiducial involved or just more about the action or more about units something is being set
-* `string2`  Second string is for more optional status some commands may fill in as needed.
-* `num1`  Floating point numeric value. Often this can be a value for a set type of operation for verification
-* `num2`  Second floating point value, not used yet.
-* `statusBits`  An unused integer perhaps of value for future or user extensions of this script
