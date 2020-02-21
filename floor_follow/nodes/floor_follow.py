@@ -51,6 +51,7 @@ from custom_messages.msg import FollowerCommand, FollowerStatus
 from geometry_msgs.msg import TransformStamped, Twist
 from fiducial_msgs.msg import FiducialTransform, FiducialTransformArray
 from tf.transformations import euler_from_quaternion, quaternion_from_euler
+from sensor_msgs.msg import Range
 
 import tf2_ros
 from math import pi, sqrt, atan2
@@ -162,8 +163,14 @@ class DoFloorFollowServer:
        # Proportion of linear error to use as linear velocity
        self.linear_rate = rospy.get_param("~linear_rate", 1.2)
 
+       # The gain used to approach target. We still cap speed at max_linear_rate
+       self.approach_gain = rospy.get_param("~approach_gain", 1.0)
+
        # Maximum linear speed (meters/second)
        self.max_linear_rate = rospy.get_param("~max_linear_rate", 1.5)
+
+       # The percent of target distance we get to before we consider we have arrived
+       self.arrival_window = rospy.get_param("~arrival_window", 1.1)
 
        # Linear speed decay (meters/second)
        self.linear_decay = rospy.get_param("~linear_decay", 0.9)
@@ -185,7 +192,11 @@ class DoFloorFollowServer:
        self.cmdvelPub = rospy.Publisher("/cmd_vel", Twist, queue_size=1)
 
        # Subscribe to incoming transforms
-       rospy.Subscriber("/fiducial_transforms", FiducialTransformArray, self.newTf)
+       rospy.Subscriber("/fiducial_transforms", FiducialTransformArray, self.newFiducialTfs)
+
+       # Subscribe to sonar range sensors for object detection
+       rospy.Subscriber("/sonars", Range, self.rangeCallback)
+
        self.fid_x = self.min_dist
        self.fid_y = 0
        self.fid_r = 0
@@ -222,7 +233,16 @@ class DoFloorFollowServer:
     """
     Called when a FiducialTransformArray is received
     """
-    def newTf(self, msg):
+    def rangeCallback(self, msg):
+        #if msg.header.frame_id == "sonar_1" or msg.header.frame_id == "sonar_2" or msg.header.frame_id == "sonar_3":
+        if msg.header.frame_id == "sonar_3":
+            print msg.header.frame_id, msg.range
+
+
+    """
+    Called when a FiducialTransformArray is received
+    """
+    def newFiducialTfs(self, msg):
         imageTime = msg.header.stamp
         self.linSpeed = 0
 
@@ -280,8 +300,8 @@ class DoFloorFollowServer:
                 self.tfBuffer.set_transform(t, "follow")
 
         if not found:
-            if self.debug_follow > 0:
-                print "Fiducial %s NOT found." % (self.target_fiducial)
+            if self.debug_follow > 0 and self.target_fiducial != self.null_fiducial:
+                print "Target Fiducial %s NOT found." % (self.target_fiducial)
             self.fid_in_view = 0
             return # Exit this function now, we don't see the fiducial
         try:
@@ -330,8 +350,8 @@ class DoFloorFollowServer:
             self.fid_in_view     = 0              # force at least one target acquisition
             self.publishStatus1Str(cmdType, "QueryIfFiducialIsSeen", self.target_fiducial)
 
-        elif cmdType == goal.FF_CMD_FOLLOW_FIDUCIAL:
-            # set new fiducial to follow with required end action once we have tracked it
+        elif cmdType == goal.FF_CMD_FOLLOW_FIDUCIAL or cmdType == goal.FF_CMD_GOTO_FIDUCIAL_ON_PATH:
+            # set new fiducial to follow or approach on a pathwith required end action once we have tracked it
             self.target_fiducial = goal.strParam1
             self.actOnDone       = goal.actionOnDone      # required parameter for a follow
             self.fid_in_view     = 0              # force at least one target acquisition
@@ -380,13 +400,30 @@ class DoFloorFollowServer:
             # The queue has been cleared for all but this one but we may need to
             # cleanup some state in this background loop so do that now
             self.cmdStatus       = goal.FF_STATUS_CMD_IDLE
+
         elif cmdType == goal.FF_CMD_SET_MAX_LIN_RATE:
-            if (goal.numParam1 < 0.0 or goal.numParam1 > 1.0):
+            if (goal.numParam1 < 0.0 or goal.numParam1 > 1.5):
                 retCode = goal.FF_STATUS_CMD_PARAM_RANGE 
                 self.publishStatus1StrAndValue(cmdType, "SetMaxLinierRate", "Invalid max linear rate!", goal.numParam1)
             else:
                 self.max_linear_rate = goal.numParam1
                 self.publishStatus1StrAndValue(cmdType, "SetMaxLinierRate", "max linear rate set ok", goal.numParam1)
+
+        elif cmdType == goal.FF_CMD_SET_APPROACH_GAIN:
+            if (goal.numParam1 < 0.0 or goal.numParam1 > 6.0):
+                retCode = goal.FF_STATUS_CMD_PARAM_RANGE 
+                self.publishStatus1StrAndValue(cmdType, "SetApproachGain", "Invalid approach gain!", goal.numParam1)
+            else:
+                self.approach_gain = goal.numParam1
+                self.publishStatus1StrAndValue(cmdType, "SetApproachGain", "approach gain set ok", goal.numParam1)
+
+        elif cmdType == goal.FF_CMD_SET_ARRIVAL_WINDOW:
+            if (goal.numParam1 < 0.5 or goal.numParam1 > 1.5):
+                retCode = goal.FF_STATUS_CMD_PARAM_RANGE 
+                self.publishStatus1StrAndValue(cmdType, "SetArrivalWindow", "Invalid arrival window!", goal.numParam1)
+            else:
+                self.arrival_window = goal.numParam1
+                self.publishStatus1StrAndValue(cmdType, "SetArrivalWindow", "arrival window set ok", goal.numParam1)
 
         elif cmdType == goal.FF_CMD_SET_DRIVE_RATE:
             if (goal.numParam1 < 0.0 or goal.numParam1 > 1.0):
@@ -518,12 +555,11 @@ class DoFloorFollowServer:
     # -----------------------------------------------------------------------------------------
     # handler for approaching a fiducial
     #
-    # This handler relies on many node global variables and is mostly here to make overall code 
-    # be more readable.
+    # This handler relies on many node global variables and is mostly here to limit clutter in main code
     # This should be called only if we have the fiducial to follow already in view per  self.fid_in_view
     #
-    def handle_approachFiducial(self, goal, target_fiducial, approachPct):
-        if goal.commandType != goal.FF_CMD_FOLLOW_FIDUCIAL:
+    def handle_approachFiducial(self, goal, target_fiducial, approach_gain, arrival_window):
+        if goal.commandType != goal.FF_CMD_FOLLOW_FIDUCIAL and goal.commandType != goal.FF_CMD_GOTO_FIDUCIAL_ON_PATH:
             return goal.FF_STATUS_CMD_NO_ACTION, "No action required"
 
         # Calculate the error in the x and y directions
@@ -564,9 +600,11 @@ class DoFloorFollowServer:
             if angSpeed > self.max_angular_rate:
                 angSpeed = self.max_angular_rate
 
-            # Set the forward speed based distance
-            linSpeed = forward_error * self.linear_rate
-            # Make sure that the angular speed is within limits
+            # Set the forward speed which backs down as we get closer to the fiducial
+            # Normally approach_gain is 1.0 but to do faster end approach we use higher value
+            linSpeed = forward_error * self.linear_rate * self.approach_gain
+
+            # Cap the linear speed within limits
             if linSpeed < -self.max_linear_rate:
                 linSpeed = -self.max_linear_rate
             if linSpeed > self.max_linear_rate:
@@ -603,12 +641,17 @@ class DoFloorFollowServer:
         if not zeroSpeed:
             self.suppressCmd = False
 
-        if (self.fid_in_view == 1) and (forward_error <= (self.min_dist * approachPct)) \
-            and (abs(linSpeed) < 0.01) and (abs(angSpeed) < 0.01):
+        # Determine if we have reached the target close enough to move on to next goal
+        # for FOLLOW we really zero in on the fiducial but for PATH mode we move on to next one when close
+        if (self.fid_in_view == 1 and abs(forward_error) <= (self.min_dist * self.arrival_window)) and \
+            ((goal.commandType == goal.FF_CMD_FOLLOW_FIDUCIAL and abs(linSpeed) < 0.01 and abs(angSpeed) < 0.01) or \
+            goal.commandType == goal.FF_CMD_GOTO_FIDUCIAL_ON_PATH):
             # Here is logic to stop following if we think we are at the target
             # and we see the target and action once found is set to stop following
             fidDistanceX = self.fid_x 
             fidRotationZ = self.fid_r 
+
+            # for FOLLOW_FIDUCIAL we have option to drive on top slowly and also assume fiducial pose
             if  (self.cmdStatus == goal.FF_STATUS_CMD_IN_PROGRESS) and \
                 (self.currentCommand == goal.FF_CMD_FOLLOW_FIDUCIAL):
                 print "Arrived at following fiducial %s  actionOnDone %d comment %s\n" % \
@@ -789,13 +832,14 @@ class DoFloorFollowServer:
         r = rospy.Rate(self.loop_hz)
         print "Approach fiducial %s " % (self.target_fiducial)
         while retCode == goal.FF_STATUS_CMD_IN_PROGRESS:
-            retCode,retString  = self.handle_approachFiducial(goal, self.target_fiducial, 1.05)
+            retCode,retString  = self.handle_approachFiducial(goal, self.target_fiducial, self.approach_gain, self.arrival_window)
+            # print "DEBUG: Approach fiducial %s gave retCode %d and %s" % (self.target_fiducial, retCode, retString)
             if (retCode == goal.FF_STATUS_CMD_DONE_OK):
-                self.server.set_succeeded(self._result)
                 self.cmdStatus = goal.FF_STATUS_CMD_IDLE
                 self.cmdResult = goal.FF_RESULT_CMD_DONE_OK
                 self.target_fiducial = self.null_fiducial
                 self.fid_in_view = 0
+                self.server.set_succeeded(self._result)
                 return 
 
             # Here are some cases the client may wish to consider 

@@ -131,28 +131,34 @@ class Controller:
 
         # First optionally configure parameters we want to be active for commands
         #self.publishFollowerCommand(FF_CMD_CLEAR_COMMANDS,  0 , " ", 0.0, "Clear all pending commands")
-        self.publishFollowerCommand(goal.FF_CMD_SET_MAX_LIN_RATE, goal.FF_ONDONE_DO_NEXT_COMMAND, " ", 0.3, "Set max lin rate")
-        self.publishFollowerCommand(goal.FF_CMD_SET_DRIVE_RATE,   goal.FF_ONDONE_DO_NEXT_COMMAND, " ", 0.15, "Set drive rate")
-        self.publishFollowerCommand(goal.FF_CMD_SET_ROTATE_RATE,  goal.FF_ONDONE_DO_NEXT_COMMAND, " ", 0.3, "Set rotate rate")
+        self.publishFollowerCommand(goal.FF_CMD_SET_MAX_LIN_RATE,   goal.FF_ONDONE_DO_NEXT_COMMAND, " ", 0.3, "Set max lin rate")
+        self.publishFollowerCommand(goal.FF_CMD_SET_DRIVE_RATE,     goal.FF_ONDONE_DO_NEXT_COMMAND, " ", 0.25, "Set drive rate")
+        self.publishFollowerCommand(goal.FF_CMD_SET_ROTATE_RATE,    goal.FF_ONDONE_DO_NEXT_COMMAND, " ", 0.3, "Set rotate rate")
+        self.publishFollowerCommand(goal.FF_CMD_SET_APPROACH_GAIN,  goal.FF_ONDONE_DO_NEXT_COMMAND, " ", 3.0, "Set approach gain")
+        self.publishFollowerCommand(goal.FF_CMD_SET_ARRIVAL_WINDOW, goal.FF_ONDONE_DO_NEXT_COMMAND, " ", 1.40, "Set arrival window")
+
+        #self.publishFollowerCommand(goal.FF_CMD_WAIT_IN_SECONDS, goal.FF_ONDONE_DO_NEXT_COMMAND, " ", 12.0, "Wait a few sec ")
 
         # query if we can see a given fiducial at this time
-        self.publishFollowerCommand(goal.FF_CMD_IS_FIDUCIAL_SEEN, goal.FF_ONDONE_DO_NEXT_COMMAND, "fid104", 0.0, "Do we see this fiducial")
+        self.publishFollowerCommand(goal.FF_CMD_IS_FIDUCIAL_SEEN, goal.FF_ONDONE_DO_NEXT_COMMAND, "fid102", 0.0, "Do we see this fiducial")
         self.publishFollowerCommand(goal.FF_CMD_IS_FIDUCIAL_SEEN, goal.FF_ONDONE_DO_NEXT_COMMAND, "fid106", 0.0, "Do we see this fiducial")
 
         # Next we show how to follow a few fiducials on the floor
-        self.publishFollowerCommand(goal.FF_CMD_DRIVE_REVERSE,   goal.FF_ONDONE_DO_NEXT_COMMAND, " ", 0.4, "Drive reverse ")
-        self.publishFollowerCommand(goal.FF_CMD_WAIT_IN_SECONDS, goal.FF_ONDONE_DO_NEXT_COMMAND, " ", 1.0, "Wait a few sec ")
-        self.publishFollowerCommand(goal.FF_CMD_DRIVE_FORWARD,   goal.FF_ONDONE_DO_NEXT_COMMAND, " ", 0.3, "Drive forward ")
-        self.publishFollowerCommand(goal.FF_CMD_WAIT_IN_SECONDS, goal.FF_ONDONE_DO_NEXT_COMMAND, " ", 1.0, "Wait a few sec ")
-        self.publishFollowerCommand(goal.FF_CMD_DRIVE_REVERSE,   goal.FF_ONDONE_DO_NEXT_COMMAND, " ", 0.3, "Drive reverse ")
-        self.publishFollowerCommand(goal.FF_CMD_WAIT_IN_SECONDS, goal.FF_ONDONE_DO_NEXT_COMMAND, " ", 1.0, "Wait a few sec ")
-        self.publishFollowerCommand(goal.FF_CMD_ROTATE_LEFT,     goal.FF_ONDONE_DO_NEXT_COMMAND, " ", 0.7, "Rotate left ")
-        self.publishFollowerCommand(goal.FF_CMD_WAIT_IN_SECONDS, goal.FF_ONDONE_DO_NEXT_COMMAND, " ", 1.0, "Wait a few sec ")
-        self.publishFollowerCommand(goal.FF_CMD_ROTATE_RIGHT,    goal.FF_ONDONE_DO_NEXT_COMMAND, " ", 0.7, "Rotate right")
-        self.publishFollowerCommand(goal.FF_CMD_WAIT_IN_SECONDS, goal.FF_ONDONE_DO_NEXT_COMMAND, " ", 1.0, "Wait a few sec ")
-        self.publishFollowerCommand(goal.FF_CMD_FOLLOW_FIDUCIAL, goal.FF_ONDONE_DO_NEXT_COMMAND, "fid106", 0.0, "Follow a fiducial")
-        self.publishFollowerCommand(goal.FF_CMD_WAIT_IN_SECONDS, goal.FF_ONDONE_DO_NEXT_COMMAND, " ", 1.0, "Wait a few sec ")
-        self.publishFollowerCommand(goal.FF_CMD_FOLLOW_FIDUCIAL, goal.FF_ONDONE_DRIVE_ON_TOP, "fid102", 0.0, "Follow this fiducial")
+        #self.publishFollowerCommand(goal.FF_CMD_DRIVE_REVERSE,   goal.FF_ONDONE_DO_NEXT_COMMAND, " ", 1.0, "Drive reverse ")
+        #self.publishFollowerCommand(goal.FF_CMD_WAIT_IN_SECONDS, goal.FF_ONDONE_DO_NEXT_COMMAND, " ", 2.0, "Wait a few sec ")
+        #self.publishFollowerCommand(goal.FF_CMD_DRIVE_FORWARD,   goal.FF_ONDONE_DO_NEXT_COMMAND, " ", 0.3, "Drive forward ")
+        #self.publishFollowerCommand(goal.FF_CMD_WAIT_IN_SECONDS, goal.FF_ONDONE_DO_NEXT_COMMAND, " ", 1.0, "Wait a few sec ")
+        #self.publishFollowerCommand(goal.FF_CMD_DRIVE_REVERSE,   goal.FF_ONDONE_DO_NEXT_COMMAND, " ", 0.3, "Drive reverse ")
+        #self.publishFollowerCommand(goal.FF_CMD_WAIT_IN_SECONDS, goal.FF_ONDONE_DO_NEXT_COMMAND, " ", 1.0, "Wait a few sec ")
+        #self.publishFollowerCommand(goal.FF_CMD_ROTATE_LEFT,     goal.FF_ONDONE_DO_NEXT_COMMAND, " ", 0.7, "Rotate left ")
+        #self.publishFollowerCommand(goal.FF_CMD_WAIT_IN_SECONDS, goal.FF_ONDONE_DO_NEXT_COMMAND, " ", 0.2, "Wait a short time ")
+        #self.publishFollowerCommand(goal.FF_CMD_ROTATE_RIGHT,    goal.FF_ONDONE_DO_NEXT_COMMAND, " ", 0.7, "Rotate right")
+        #self.publishFollowerCommand(goal.FF_CMD_WAIT_IN_SECONDS, goal.FF_ONDONE_DO_NEXT_COMMAND, " ", 0.2, "Wait a short time ")
+        self.publishFollowerCommand(goal.FF_CMD_GOTO_FIDUCIAL_ON_PATH, goal.FF_ONDONE_DO_NEXT_COMMAND, "fid106", 0.0, "Goto path fiducial")
+        #self.publishFollowerCommand(goal.FF_CMD_FOLLOW_FIDUCIAL, goal.FF_ONDONE_DO_NEXT_COMMAND, "fid106", 0.0, "Follow this fiducial")
+        self.publishFollowerCommand(goal.FF_CMD_WAIT_IN_SECONDS, goal.FF_ONDONE_DO_NEXT_COMMAND, " ", 0.2, "Wait a few sec ")
+        self.publishFollowerCommand(goal.FF_CMD_FOLLOW_FIDUCIAL, goal.FF_ONDONE_DO_NEXT_COMMAND, "fid102", 0.0, "Follow this fiducial")
+        #self.publishFollowerCommand(goal.FF_CMD_FOLLOW_FIDUCIAL, goal.FF_ONDONE_DRIVE_ON_TOP, "fid102", 0.0, "Follow this fiducial")
 
         print "Commands sent "
 
