@@ -50,6 +50,7 @@ int32 FF_STATUS_CMD_FID_WAS_LOST=-5    # A fiducial was seen at start of approac
 int32 FF_STATUS_CMD_FID_TOO_FAR=-6     # The fiducial is too far away to process this command
 int32 FF_STATUS_CMD_PARAM_RANGE=-7     # A parameter was set to invalid range
 int32 FF_STATUS_CMD_TIMEOUT=-9         # A timeout per the passed in or worse case timeout
+int32 FF_STATUS_CMD_OBSTACLE_CLOSE=-10 # An obstacle is blocking progress so we stopped
 
 ---
 # define the result

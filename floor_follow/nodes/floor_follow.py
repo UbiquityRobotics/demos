@@ -73,6 +73,7 @@ class DoFloorFollowServer:
     _feedback = follow_actions.msg.DoFollowCmdFeedback()
     _result = follow_actions.msg.DoFollowCmdResult()
 
+
     """
     Constructor for our class
     """
@@ -183,6 +184,14 @@ class DoFloorFollowServer:
        self.max_lost_count = rospy.get_param("~max_lost_count", 400)
 
        # ------------------------------------------------------------------
+       # Obstacle avoidance related. Setup an array that will hold the sonar ranges
+       self.num_sonars   = 5
+       self.sonar_ranges = [None] * self.num_sonars
+
+       # Set a threshold for when we must be stopped when at or closer than this distance
+       self.obstacle_stop_range = rospy.get_param("~obstacle_stop_range", 0.3)
+
+       # ------------------------------------------------------------------
        # Setup ROS topics to be published or subscribed to for operation
 
        # A publisher for status of this node
@@ -234,9 +243,16 @@ class DoFloorFollowServer:
     Called when a FiducialTransformArray is received
     """
     def rangeCallback(self, msg):
+
         #if msg.header.frame_id == "sonar_1" or msg.header.frame_id == "sonar_2" or msg.header.frame_id == "sonar_3":
-        if msg.header.frame_id == "sonar_3":
-            print msg.header.frame_id, msg.range
+        words = msg.header.frame_id.split('_')    # we expect frame_id like  sonar_3 for number 3
+        idx = int(words[1])
+
+        # save the most recent sonar range
+        self.sonar_ranges[idx] = msg.range
+
+        #if msg.header.frame_id == "sonar_3":
+        #    print msg.header.frame_id, words[1], idx, self.sonar_ranges[3], msg.range, 
 
 
     """
@@ -446,6 +462,17 @@ class DoFloorFollowServer:
             retCode = goal.FF_STATUS_CMD_INVALID 
         return retCode
 
+    # Do object range detection in this routine which uses ongoing sonar distances
+    # This will return nearest obstical distance in meters
+    # We can apply weights to different sensors to adjust for their angle for example
+    def getNearestObstacleRange(self):
+        nearestDetection = 100.0    # set FAR past possible detection range
+        for i in range(self.num_sonars):
+            if self.sonar_ranges[i] < nearestDetection:
+                nearestDetection = self.sonar_ranges[i]
+        return nearestDetection
+         
+
     # -----------------------------------------------------------------------------------------
     # The handler routines execute specific goals if in the mode their function is required..
     # They return with a status code and a string 
@@ -490,12 +517,15 @@ class DoFloorFollowServer:
             self.moveTimeLeft = 0.0
             return goal.FF_STATUS_CMD_DONE_OK, "No action. Drive command already complete"
 
+        # In order to avoid objects or slow to not hit them we detect things in front
+        nearestObject = self.getNearestObstacleRange()
+
         secInProgress = 0.0
         secPerLoop = 1.0 / loopRate 
         r = rospy.Rate(loopRate)
 
-        print "Move in progress for cmd %d. Status is %d driveSpeed %f rotateSpeed %f with %f sec left" % \
-            (cmdType, self.cmdStatus, driveSpeed, rotateSpeed, self.moveTimeLeft)
+        print "Do Move for cmd %d. Status %d driveSpeed %f rotateSpeed %f with %f sec left. NearObj at %f" % \
+            (cmdType, self.cmdStatus, driveSpeed, rotateSpeed, self.moveTimeLeft, nearestObject)
 
         twist = Twist()
         twist.angular.z = 0.0
@@ -506,6 +536,11 @@ class DoFloorFollowServer:
                 twist.linear.x   = driveSpeed
             if (cmdType == goal.FF_CMD_ROTATE_LEFT)   or (cmdType == goal.FF_CMD_ROTATE_RIGHT):
                 twist.angular.z  = rotateSpeed
+
+            # The simple drive forward command will stop in error if an object is too close
+            nearestObject = self.getNearestObstacleRange()
+            if cmdType == goal.FF_CMD_DRIVE_FORWARD and nearestObject <= self.obstacle_stop_range:
+                return goal.FF_STATUS_CMD_OBSTACLE_CLOSE, "STOP for object too close for forward drive command!"
 
             # publish the required /cmd_vel message to motor controller
             if self.debug_cmdvel == 0: 
