@@ -58,19 +58,19 @@ Use Control-C to stop this onslaught of text!   we just wanted to see if the Lid
 ## Running gmapping once the mapmaker launch file is running
     rosrun gmapping slam_gmapping scan:=scan
 
-## Run RViz Back on The LapTop To Watch Map Building
+## Run RViz Back on The LapTop To Watch As Things Progress
 
-This will require RViz to have a configureation (we hope to supply later in this repository) that will allow you to see the map and laser scan.    
+On the laptop copy over lidar_mapmaker.rviz from this repository to your home directory so it can configure rviz easily.
+Then on the laptop you can run this from home folder.
 
-TO BE SUPPLIED:  I NEED TO SUPPLY A config file here!  But assuming it exists ...
-
-    rosrun rviz rviz
+    rosrun rviz rviz -d lidar_mapmaker.rviz
 
 
 ##  Drive Around To Create A Suitable Map
 
 Might be best to have a Joystick but if not you have to ssh to the robot and use 'twist' to drive around.
 You would then drive around the area with the optional Logitech F710 joystick or 'twist' command below but perhaps start 
+
     rosrun teleop_twist_keyboard teleop_twist_keyboard.py 
 
 
@@ -80,6 +80,8 @@ As the robot drives. you will be building more date for the map and you would se
 After your map looks ok you MUST SAVE THE MAP or your map is lost on stopping gmapping!    Here is the command to save the map
 
     rosrun map_server map_saver -f mynewmap-ils
+
+We suggest you move both the .pgm and the .yaml files into magni_lidar/maps so they can be found and used easily
 
 
 
@@ -97,16 +99,23 @@ Lets GO!
 ## Start Up The Navigation Stack Using The Map You have Saved
 
 Here we need to start the launch file and specify a map that will be used for navigation in whatever room or area you are in that has previously been mapped using gmapping and saved as a map.
+Edit magni_lidar_maprunner.launch to set the desired map.  We supply a tinyroom.map as an example but this is just a small square area and unless you duplicate it exactly this will not work for you.  It was about 1.9M x 1.5M if you have a bunch of cardboard you could start doing navigation without the making of the map part of this demo
 
-    roslaunch magni_lidar magni_lidar_maprunnier.launch  map:=myNewMap
+    roslaunch magni_lidar magni_lidar_maprunnier.launch  
 
-## Run RViz Back on The LapTop To Define Goals And See Driving Progress
+## Run RViz Back on The LapTop To Watch As Things Progress
 
-This will require RViz to have a configureation (we hope to supply later in this repository) that will allow you to see the map and laser scan.    
+On the laptop copy over lidar_mapmaker.rviz from this repository to your home directory so it can configure rviz easily.
+Then on the laptop you can run this from home folder.
 
-TO BE SUPPLIED:  I NEED TO SUPPLY A config file here!  But assuming it exists ...
+    rosrun rviz rviz -d lidar_mapmaker.rviz
 
-    rosrun rviz rviz
+
+## Define a Target Pose And Let The robot Go there
+
+Here is the really fun part, assuming all the other things are working.  This is where you tell the robot to move to places in the map.
+
+The 'pose' of a floor based robot is both it's X and Y location as well as the rotation on the floor.  That is what you will define.
 
 I will attempt to explain in words how to define a goal for the robot.  Basically we want to form a 2D Goal for the robot that is at some location and indicates the direction we want the robot to be facing when the goal is reached
 
@@ -122,7 +131,7 @@ If the gods are with you the robot will approach that spot and rotate to the dir
 
 There are a great many setting so make robot navigation work well AND your robot is required to have excellent odometry to make less errors in navigation.  So what you will find is after moving a couple times there may be buildup of errors and the robot is NOT where it should be.   We will work on parameters to tweek the accuracy.
 
-# Conclustion - The Real World Is not Ideal in the land of robotics
+# Conclusion - The Real World Is not Ideal in the land of robotics
 
 The purpose of this entire demos is to present you with the concepts of map making and navigation.
 Do not expect excellent performance, that takes a great deal of tweeking and effort not discussed here.
