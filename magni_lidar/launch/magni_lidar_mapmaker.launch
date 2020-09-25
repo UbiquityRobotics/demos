@@ -1,0 +1,26 @@
+<launch>
+
+ <!-- Simple launch file for using rplidar A1 to generate a map with a Magni default image -->
+ <!-- 1) Setup the base_link_to_laser statis publisher for proper translation to lidar     -->
+ <!-- 2) Setup the rplidar serial_port to your own serial port. ttyUSB0 is very normal     -->
+ <!-- 3) If you want the lidar to show up in rviz you must modify the magni urdf file      -->
+
+ <param name="/use_sime_time" value="true"/>
+
+
+  <!-- Start the rplidar node built from https://github.com/sharp-rmf/rplidar_ros          -->
+  <node name="rplidarNode"          pkg="rplidar_ros"  type="rplidarNode" output="screen">
+    <param name="serial_port"         type="string" value="/dev/ttyUSB0"/>
+    <param name="serial_baudrate"     type="int"    value="115200"/><!--A1/A2 -->
+    <param name="frame_id"            type="string" value="laser"/>
+    <param name="inverted"            type="bool"   value="false"/>
+    <param name="angle_compensate"    type="bool"   value="true"/>
+  </node>
+
+  <node pkg="tf" type="static_transform_publisher" name="map_to_odom" args="0.0 0.0 0.0 0 0 0.0 /map /odom 20"/>
+  <node pkg="tf" type="static_transform_publisher" name="laser_prox_sensors" args="0.0 0 0.10 0 0 0 /laser /sensor_axis 20"/>
+
+  <!-- Add in child frame of rplider as it is not in our model yet -->
+  <node pkg="tf" type="static_transform_publisher" name="base_link_to_laser" args="-0.03 0 0.20 0 0 0 /base_link /laser 20"/>
+
+</launch>
