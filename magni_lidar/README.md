@@ -5,6 +5,10 @@ Because navigation using a Lidar is a very popular and relatively easy mode for 
 
 We will use a relatively low cost and very popular Slamtec  RPLidar A1 that is connected to the Magni raspberry pi USB and will by default in most cases show up as serial device /dev/ttyUSB0
 
+For these files the RPLidar is screwed to the top plate using 5mm spacers so the ribbon cable can bend around and allow their little USB board to be connected via USB cable to a port of the Raspberry Pi.
+
+The center of the lidar is centered in Y and is thus half way between each wheel but of course on top of the Magni top plate.  the motor and pully is on the rear side of the lidar.
+
 # ROS Configuration Required To Run these sets of demo launch files
 
 Unless we later install these on our images at this time, late 2020, these installs are required.
