@@ -58,19 +58,23 @@ Use Control-C to stop this onslaught of text!   we just wanted to see if the Lid
 ## Running gmapping once the mapmaker launch file is running
     rosrun gmapping slam_gmapping scan:=scan
 
-## Back on The LapTop you can run RViz To Watch Map Building
+## Run RViz Back on The LapTop To Watch Map Building
 
-This will require RViz to have a configureation (we hope to supply later in this repository) that will allow you to see the map and laser scan.
+This will require RViz to have a configureation (we hope to supply later in this repository) that will allow you to see the map and laser scan.    
 
-You would then drive around the area with the optional Logitech F710 joystick or 'twist' command below
+TO BE SUPPLIED:  I NEED TO SUPPLY A config file here!  But assuming it exists ...
 
+    rosrun rviz rviz
+
+
+##  Drive Around To Create A Suitable Map
+
+Might be best to have a Joystick but if not you have to ssh to the robot and use 'twist' to drive around.
+You would then drive around the area with the optional Logitech F710 joystick or 'twist' command below but perhaps start 
     rosrun teleop_twist_keyboard teleop_twist_keyboard.py 
 
 
-
-## Drive Around To Complete A Map
-  
-Use the robot joystick if you have it or use this twist command to drive around and as you do so the map will be building more date and you would see it on RVIZ
+As the robot drives. you will be building more date for the map and you would see it on RVIZ
 
 ## SAVE THE MAP!
 After your map looks ok you MUST SAVE THE MAP or your map is lost on stopping gmapping!    Here is the command to save the map
@@ -81,6 +85,44 @@ After your map looks ok you MUST SAVE THE MAP or your map is lost on stopping gm
 
 # Driving Around Within A Pre-Created Map
 
-THIS SECTION IS YET TO BE COMPLETED but it involves use of  AMCL  software to find robot position as well as setting goals to be driven to in RVIZ or other ways. 
+THIS SECTION IS YET TO BE SUPPORTED FOR LACK OF LAUNCH FILES TO BE COMPLETED but it involves use of  AMCL  software to find robot position as well as setting goals to be driven to in RVIZ or other ways. 
+
+
+Once a map is available you can then navigate within that map or set of rooms.   This is that you have been waiting for frankly!     The idea here is the launch file publishes onto ROS the previously made map and then some very advanced software called   AMCL or Adaptive Monte Carlo Locationization figures out where the robot is at any given time.  
+
+You then can use  RViz on your laptop (described in mapping example) and can define a pose that you want the robot to move to.   A 'Pose' means a specific location in terms of X and Y on the floor as well as the rotation of the robot.  
+
+Lets GO!
+
+## Start Up The Navigation Stack Using The Map You have Saved
+
+Here we need to start the launch file and specify a map that will be used for navigation in whatever room or area you are in that has previously been mapped using gmapping and saved as a map.
+
+    roslaunch magni_lidar magni_lidar_maprunnier.launch  map:=myNewMap
+
+## Run RViz Back on The LapTop To Define Goals And See Driving Progress
+
+This will require RViz to have a configureation (we hope to supply later in this repository) that will allow you to see the map and laser scan.    
+
+TO BE SUPPLIED:  I NEED TO SUPPLY A config file here!  But assuming it exists ...
+
+    rosrun rviz rviz
+
+I will attempt to explain in words how to define a goal for the robot.  Basically we want to form a 2D Goal for the robot that is at some location and indicates the direction we want the robot to be facing when the goal is reached
+
+    Identify a place you want the robot to drive to
+    Click on the left mouse button on that spot and HOLD MOUSE KEY DOWN because an arrow will show up
+    Move around the mouse so the arrow points in the direction the robot will face when done
+    Release the left mouse button
+
+If the gods are with you the robot will approach that spot and rotate to the direction you specified.
 
     
+## A word about the cruelty of the Real World
+
+There are a great many setting so make robot navigation work well AND your robot is required to have excellent odometry to make less errors in navigation.  So what you will find is after moving a couple times there may be buildup of errors and the robot is NOT where it should be.   We will work on parameters to tweek the accuracy.
+
+# Conclustion - The Real World Is not Ideal in the land of robotics
+
+The purpose of this entire demos is to present you with the concepts of map making and navigation.
+Do not expect excellent performance, that takes a great deal of tweeking and effort not discussed here.
