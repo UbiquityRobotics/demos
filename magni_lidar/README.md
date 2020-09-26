@@ -3,11 +3,15 @@
 
 Because navigation using a Lidar is a very popular and relatively easy mode for robots we are going to supply here some basic starter launch files and a little bit of directions for how to get started in robot navigation using a Lidar.
 
-We will use a relatively low cost and very popular Slamtec  RPLidar A1 that is connected to the Magni raspberry pi USB and will by default in most cases show up as serial device /dev/ttyUSB0
+Our goal here is to put in one place the key elements of robot navigation using a very popular device, a LIDAR, to allow the robot to see walls all around and both map and then later navigate within a known mapped area.
 
-For these files the RPLidar is screwed to the top plate using 5mm spacers so the ribbon cable can bend around and allow their little USB board to be connected via USB cable to a port of the Raspberry Pi.
+The full system here could be studied and investigated by learning more about such things as ROS /tf topic and the lidar itself as well as how ROS understands the orientation of sensors in 3D space.   Plenty to learn but this is a known starting point as an example.
+
+We will use a relatively low cost and very popular Slamtec  RPLidar A1 that is connected to the Magni raspberry pi USB and will by default in most cases show up as serial device /dev/ttyUSB0.  For these files the RPLidar is screwed to the top plate using 5mm spacers so the ribbon cable can bend around and allow their little USB board to be connected via USB cable to a port of the Raspberry Pi.
 
 The center of the lidar is centered in Y and is thus half way between each wheel but of course on top of the Magni top plate.  the motor and pully is on the rear side of the lidar.
+
+To modify this example for use of other Lidars is best done after you understand this demo but even reading this demo set of instructions will offer you many things to investigate and research to go as far as you like with your own robot hardware.
 
 # ROS Configuration Required To Run these sets of demo launch files
 
