@@ -97,10 +97,9 @@ We suggest you move both the .pgm and the .yaml files into magni_lidar/maps so t
 
 # Driving Around Within A Pre-Created Map
 
-THIS SECTION IS YET TO BE SUPPORTED FOR LACK OF LAUNCH FILES TO BE COMPLETED but it involves use of  AMCL  software to find robot position as well as setting goals to be driven to in RVIZ or other ways. 
-
-
 Once a map is available you can then navigate within that map or set of rooms.   This is that you have been waiting for frankly!     The idea here is the launch file publishes onto ROS the previously made map and then some very advanced software called   AMCL or Adaptive Monte Carlo Locationization figures out where the robot is at any given time.  
+
+Another piece of key software will be the move_base package that will accept commands to go places and talk to the robot navigation stack to drive the robot to the destination.  The move_base software does path planning as well as object avoidance if the system has been setup for detection of things like a person or object getting in the way of the robot.
 
 You then can use  RViz on your laptop (described in mapping example) and can define a pose that you want the robot to move to.   A 'Pose' means a specific location in terms of X and Y on the floor as well as the rotation of the robot.  
 
@@ -121,6 +120,13 @@ So far we have setup things so the robot knows where it is within a map.   We ne
 
 We will now be ready to accept 'goals' and then move to those goals.
 
+
+## A Word About How Dynamic Objects That May Move Are Avoided
+
+ROS navigation stack can use detection of things that get in the way of the robot to then alter the path the robot was taking to the destination.   This is only mentioned here at this time as so far this simple demo does not use this feature.     Sensors such as sonar sensors can be used to detect things and place them in something called a ```costmap```.  The costmap can change as things move into and out of the path of the robot like your dog or cat or even yourself.
+
+The move_base code can dynamically re-think the path to be taken to avoid objects in the costmap.
+
 ## Run RViz Back on The LapTop To Watch As Things Progress
 
 On the laptop copy over lidar_mapmaker.rviz from this repository to your home directory so it can configure rviz easily.
@@ -129,6 +135,17 @@ Then on the laptop you can run this from home folder.
     rosrun rviz rviz -d lidar_mapmaker.rviz
 
 
+## Tell The Robot Where It Is Initially Located In The Map
+
+The AMCL package is now told just where the robot is within the map and which direction it is pointing.  This step allows the AMCL package to have a very good initial pose for the robot so it can estimate how to get to other locations right away. 
+
+Set the 2D Pose Estimate using the RViz interface as follows:
+
+    - Left click the ```2D Pose Estimate` button in RViz 
+    - Find the place the robot is in the map and left click on that spot but HOLD MOUSE BUTTON
+    - A large green arrow will appear and you have to drag mouse so arrow points same angle as the robot
+    - Release the mouse button and then the robot will have a very good estimate of it's pose
+    
 ## Define a Target Pose And Let The robot Go there
 
 Here is the really fun part, assuming all the other things are working.  This is where you tell the robot to move to places in the map.
@@ -137,10 +154,10 @@ The 'pose' of a floor based robot is both it's X and Y location as well as the r
 
 I will attempt to explain in words how to define a goal for the robot.  Basically we want to form a 2D Goal for the robot that is at some location and indicates the direction we want the robot to be facing when the goal is reached
 
-    Identify a place you want the robot to drive to
-    Click on the left mouse button on that spot and HOLD MOUSE KEY DOWN because an arrow will show up
-    Move around the mouse so the arrow points in the direction the robot will face when done
-    Release the left mouse button
+    - Identify a place you want the robot to drive to
+    - Click on the left mouse button on that spot and HOLD MOUSE KEY DOWN because an arrow will show up
+    - Move around the mouse so the arrow points in the direction the robot will face when done
+    - Release the left mouse button
 
 If the gods are with you the robot will approach that spot and rotate to the direction you specified.
 
