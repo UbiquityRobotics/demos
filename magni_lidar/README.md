@@ -46,6 +46,8 @@ Once the laptop is fully configured (a big job) OR you use our virtual image (so
 
 # Making Your Map
 
+Place the magni where you would like to be the origin of the map which will be X,Y as 0,0.   Now you should totally restart the robot where one way is to do a  ```sudo shutdown -h now```    and then  a full power off and power back on.   The reason for this is that this is a certain way to set the MCB odom counters at 0,0 so when the magni-base service starts odometry will be reset.
+
 A launch file example to start a lidar, the RPLIDAR A1, and make the system ready for gmapping is in this repository.
 
     roslaunch magni_rplidar_nav magni_lidar_mapmaker.launch
@@ -100,12 +102,20 @@ You then can use  RViz on your laptop (described in mapping example) and can def
 
 Lets GO!
 
-## Start Up The Navigation Stack Using The Map You have Saved
+## Start Up Most Of The Navigation Stack Using The Map You have Saved
 
 Here we need to start the launch file and specify a map that will be used for navigation in whatever room or area you are in that has previously been mapped using gmapping and saved as a map.
 Edit magni_lidar_maprunner.launch to set the desired map.  We supply a tinyroom.map as an example but this is just a small square area and unless you duplicate it exactly this will not work for you.  It was about 1.9M x 1.5M if you have a bunch of cardboard you could start doing navigation without the making of the map part of this demo
 
     roslaunch magni_lidar magni_lidar_maprunnier.launch  
+
+## Start Up move_base which will allow Path Planning and autonomous movement
+
+So far we have setup things so the robot knows where it is within a map.   We need to start some software that we can tell where we want to move to so that that piece of software can control the robot to approach a desired destination X,Y and rotation (both of these things together are called a desired ```pose```.    We will use rviz but we must start this piece of software called move_base now.   Ubiquity Robotics has a similar package called  ```move_basic```.
+
+    roslaunch magni_nav move_base.launch
+
+We will now be ready to accept 'goals' and then move to those goals.
 
 ## Run RViz Back on The LapTop To Watch As Things Progress
 

@@ -15,7 +15,9 @@
   <arg name="robot_model" default="$(find magni_lidar)/rplidar.urdf"/>                      -->
   <arg name="lidar_serial_port" default="/dev/ttyUSB0"/><!-- rplidar serial port            -->
   <arg name="lidar_serial_baud" default="115200"/><!-- rate for rplidar A1/A2               -->
-  <arg name="lidar_translation" default="-0.03 0 0.20 0 0 0"/><!-- base_link to lidar laser -->
+
+  <!-- Define the 3d space x,y,z translation and rotational angles for this lidar           -->
+  <arg name="lidar_translation" default="-0.03 0 0.20 0 3.14 3.14"/><!-- base_link to lidar laser -->
 
 
   <!-- Start the rplidar node built from https://github.com/sharp-rmf/rplidar_ros          -->
