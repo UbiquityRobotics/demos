@@ -52,4 +52,10 @@
   <!-- Run AMCL that takes in laser scan info and map from map_server -->
   <include file="$(find magni_lidar)/launch/amcl.launch"></include>
 
+  <!-- Automatically Start move basic for navigation. Or start manually -->
+  <!-- Manual move_basic start:  roslaunch magni_nav move_basic.launch  -->
+  <!--
+  <include file="$(find magni_nav)/launch/move_basic.launch" />
+  -->
+
 </launch>
