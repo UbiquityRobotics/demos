@@ -29,10 +29,13 @@
     <param name="angle_compensate"    type="bool"   value="true"/>
   </node>
 
+  <!--  We will let amcl publish the map to odom tf if we do not put this static transform here
+        If this launch file is used without AMCL then uncomment this static tf publication
   <node pkg="tf" type="static_transform_publisher" name="map_to_odom" args="0.0 0.0 0.0 0 0 0.0 /map /odom 20"/>
+  -->
 
   <!-- Add in child frame of rplider as it is not in our model yet -->
-  <node pkg="tf" type="static_transform_publisher" name="base_link_to_laser" args="$(arg lidar_translation) /base_link /laser 20"/>
+  <node pkg="tf" type="static_transform_publisher" name="base_link_laser" args="$(arg lidar_translation) /base_link /laser 20"/>
 
   <!-- Optionally we can add just the lidar as your robot model                             -->
   <!-- Ideally the lidar should be added to the magni urdf model but that can be complex    -->
