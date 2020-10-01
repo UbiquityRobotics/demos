@@ -197,7 +197,7 @@ class Controller:
     # For odom nav use frame_id of "odom"
     def publishMoveBaseGoalWaitForReply(self, x, y, yaw, comment):
         goal = MoveBaseGoal()
-        goal.target_pose.header.frame_id = "odom"     
+        goal.target_pose.header.frame_id = "map"     
         goal.target_pose.header.stamp = rospy.Time.now()
         goal.target_pose.pose.position.x = x 
         goal.target_pose.pose.position.y = y 

@@ -108,21 +108,31 @@ Lets GO!
 ## Start Up Most Of The Navigation Stack Using The Map You have Saved
 
 Here we need to start the launch file and specify a map that will be used for navigation in whatever room or area you are in that has previously been mapped using gmapping and saved as a map.
-Edit magni_lidar_maprunner.launch to set the desired map.  We supply a tinyroom.map as an example but this is just a small square area and unless you duplicate it exactly this will not work for you.  It was about 1.9M x 1.5M if you have a bunch of cardboard you could start doing navigation without the making of the map part of this demo
+Edit magni_lidar_maprunner.launch to set the desired map.  We supply a tinyroom.map as an example but this is just a small square area and unless you duplicate it exactly this will not work for you.  It was about 1.9M x 1.5M if you have a bunch of cardboard you could start doing navigation without the making of the map part of this demo  
 
     roslaunch magni_lidar magni_lidar_maprunnier.launch  
 
-## Start Up move_base which will allow Path Planning and autonomous movement
+## Running AMCL to dynamically determine the robot location
 
-So far we have setup things so the robot knows where it is within a map.   We need to start some software that we can tell where we want to move to so that that piece of software can control the robot to approach a desired destination X,Y and rotation (both of these things together are called a desired ```pose```.    We will use rviz but we must start this piece of software called move_base now.   Ubiquity Robotics has a similar package called  ```move_basic```.
+The package that figures out where the robot it in the room (relative to the map made before) is called AMCL.  It uses an adaptive Monte Carlo method to find the location of the robot at any given time.
+We do not have this enabled in the launch file yet nor has it been tested for this example.
 
-    roslaunch magni_nav move_base.launch
+The AMCL package would require that we not use a static transform publisher in the launch to give 0 offset from map to odom frames and let AMCL run and publish that transform.  We are leaving that out so far in this example but it is present and commented out in the launch file just launched.
+
+## Start Up move_basic which will allow Path Planning and autonomous movement
+
+So far we have setup things so the robot knows where it is within a map.   We need to start some software that we can tell where we want to move to so that that piece of software can control the robot to approach a desired destination X,Y and rotation (both of these things together are called a desired ```pose```.    We will use rviz but we must start this piece of software called move_base now.   Ubiquity Robotics ```move_basic``` is a simplified version of move_base where move_base can do complex plans to get around objects or corners.   The move_basic package can only do line of sight straight paths and if something gets in the way it stops and does not plan around the object.
+
+    roslaunch magni_nav move_basic.launch
 
 We will now be ready to accept 'goals' and then move to those goals.
 
+The more general solution to navigation uses object avoidance and the move_base package combined with a map that holds obstacles seen by sensors such as the sonar.  The objects that move in fron are in what is called the ```costmap```.  Perhaps that will be added to this example in the future.
 
-## A Word About How Dynamic Objects That May Move Are Avoided
 
+## A Word About move_base avoids Dynamic Objects That May Move
+
+We are not using the more powerful move_base in this example so far to keep things as simple as possible.   If you choose to use move_base the planing is much more advanced but of course more things can then go wrong.
 ROS navigation stack can use detection of things that get in the way of the robot to then alter the path the robot was taking to the destination.   This is only mentioned here at this time as so far this simple demo does not use this feature.     Sensors such as sonar sensors can be used to detect things and place them in something called a ```costmap```.  The costmap can change as things move into and out of the path of the robot like your dog or cat or even yourself.
 
 The move_base code can dynamically re-think the path to be taken to avoid objects in the costmap.
@@ -148,7 +158,7 @@ Set the 2D Pose Estimate using the RViz interface as follows:
     
 ## Define a Target Pose And Let The robot Go there
 
-Here is the really fun part, assuming all the other things are working.  This is where you tell the robot to move to places in the map.
+Here is the really fun part, assuming all the other things are working.  This is where you tell the robot to move to places in the map. Because we are using the simple move_basic planner be sure the path is clear to the destination.
 
 The 'pose' of a floor based robot is both it's X and Y location as well as the rotation on the floor.  That is what you will define.
 
