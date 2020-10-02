@@ -34,8 +34,9 @@
     <param name="angle_compensate"    type="bool"   value="true"/>
   </node>
 
-  <!-- Publish the map to odom transform  as 0 if we are not using amcl                     -->
+  <!-- Publish the map to odom transform  as 0 if we are not using amcl                     
   <node pkg="tf" type="static_transform_publisher" name="stp_map_to_odom" args="0.0 0.0 0.0 0 0 0.0 /map /odom 20"/>
+  -->
 
   <!-- Optionally set an identity transform so base_footprint is same as base_frame         -->
   <node pkg="tf" type="static_transform_publisher" name="stp_base_footprint_to_base_frame" args="0.0 0.0 0.0 0 0 0 /base_footprint /base_frame 20"/>
@@ -46,14 +47,9 @@
   <!-- Add in child frame of rplider as it is not in our model yet                          -->
   <node pkg="tf" type="static_transform_publisher" name="stp_base_link_laser" args="$(arg lidar_translation) /base_link /laser 20"/>
 
-  <!-- Optionally we can add just the lidar as your robot model                             -->
-  <!-- Ideally the lidar should be added to the magni urdf model but that can be complex    -->
-  <!--
-  <param name="robot_description" textfile="$(arg robot_model)" />
-  <node name="robot_state_publisher" pkg="robot_state_publisher" type="state_publisher">
-    <param name="publish_frequency" value="20.0"/>
-  </node>
-  -->
+  <!-- Run AMCL that takes in laser scan info and map then publishes map to odom transform  -->
+  <!-- AMCL will produce the map to odom transform so no need to publish a static transform -->
+  <include file="$(find magni_lidar)/launch/amcl.launch"></include>
 
   <!-- Automatically Start move basic for navigation. Or start manually -->
   <!-- Manual move_basic start:  roslaunch magni_nav move_basic.launch  -->
