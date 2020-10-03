@@ -97,12 +97,11 @@ We suggest you move both the .pgm and the .yaml files into magni_lidar/maps so t
 
 # Driving Around Within A Pre-Created Map
 
-Once a map is available you can then navigate within that map or set of rooms.   This is that you have been waiting for frankly!     The idea here is the launch file publishes onto ROS the previously made map and then some very advanced software called   AMCL or Adaptive Monte Carlo Locationization figures out where the robot is at any given time.  
+Once a map is available you can then navigate within that map or set of rooms.   This is that you have been waiting for frankly!     The idea here is the launch file publishes onto ROS the previously made map and then you either drive around using only robot odometry OR you use some very advanced software called AMCL or Adaptive Monte Carlo Locationization figures out where the robot is at any given time.  Both methods will be shown in this section.
 
-Another piece of key software will be the move_base package that will accept commands to go places and talk to the robot navigation stack to drive the robot to the destination.  The move_base software does path planning as well as object avoidance if the system has been setup for detection of things like a person or object getting in the way of the robot.
+A key piece of software used in this simple example is the move_basic package that will accept commands to go places and talk to the robot navigation stack to drive the robot to the destination.  The move_basic package is unique to Ubiquity Robotics and is a simplified version for just point to point movements based on the more advanced move_base concepts.  The ROS move_base package does path planning as well as object avoidance if the system has been setup for detection of things like a person or object getting in the way of the robot.
 
 You then can use  RViz on your laptop (described in mapping example) and can define a pose that you want the robot to move to.   A 'Pose' means a specific location in terms of X and Y on the floor as well as the rotation of the robot.  
-
 Lets GO!
 
 ## Start Up Most Of The Navigation Stack Using The Map You have Saved
@@ -112,12 +111,7 @@ Edit magni_lidar_maprunner.launch to set the desired map.  We supply a tinyroom.
 
     roslaunch magni_lidar magni_lidar_maprunnier.launch  
 
-## Running AMCL to dynamically determine the robot location
-
-The package that figures out where the robot it in the room (relative to the map made before) is called AMCL.  It uses an adaptive Monte Carlo method to find the location of the robot at any given time.
-We do not have this enabled in the launch file yet nor has it been tested for this example.
-
-The AMCL package would require that we not use a static transform publisher in the launch to give 0 offset from map to odom frames and let AMCL run and publish that transform.  We are leaving that out so far in this example but it is present and commented out in the launch file just launched.
+This launch file will strictly respect the odom information the robot keeps track of to determine robot position and rotation (called robot ```pose```).   The problem with this method is all robot odom only determination of pose drifts over time the more movements that take place.  So this method is ok for a short demo but not very usable in general real world situations.
 
 ## Start Up move_basic which will allow Path Planning and autonomous movement
 
@@ -128,14 +122,6 @@ So far we have setup things so the robot knows where it is within a map.   We ne
 We will now be ready to accept 'goals' and then move to those goals.
 
 The more general solution to navigation uses object avoidance and the move_base package combined with a map that holds obstacles seen by sensors such as the sonar.  The objects that move in fron are in what is called the ```costmap```.  Perhaps that will be added to this example in the future.
-
-
-## A Word About move_base avoids Dynamic Objects That May Move
-
-We are not using the more powerful move_base in this example so far to keep things as simple as possible.   If you choose to use move_base the planing is much more advanced but of course more things can then go wrong.
-ROS navigation stack can use detection of things that get in the way of the robot to then alter the path the robot was taking to the destination.   This is only mentioned here at this time as so far this simple demo does not use this feature.     Sensors such as sonar sensors can be used to detect things and place them in something called a ```costmap```.  The costmap can change as things move into and out of the path of the robot like your dog or cat or even yourself.
-
-The move_base code can dynamically re-think the path to be taken to avoid objects in the costmap.
 
 ## Run RViz Back on The LapTop To Watch As Things Progress
 
@@ -170,6 +156,27 @@ I will attempt to explain in words how to define a goal for the robot.  Basicall
     - Release the left mouse button
 
 If the gods are with you the robot will approach that spot and rotate to the direction you specified.
+
+
+## Running AMCL to dynamically correct the robot location
+
+The most common package that figures out where the robot it in the room (relative to the map made before) is called AMCL.  It uses an adaptive Monte Carlo method to find the location of the robot at any given time.
+
+Run the launch file below to use AMCL.  To use AMCL in any real world situation which may have a complex map you first have to use RViz to tell the robot where it is in the map.  
+
+    roslaunch magni_lidar magni_lidar_maprunnier_amcl.launch  
+
+More things have to be all working nicely for reasonable results using AMCL so we suggest you get the odom only running first and only after that works move on to this example using AMCL.
+
+The AMCL package figures out the map to odom transform and publishes that which in effect corrects the errors that build up on all robot self posting of odom frame.  The earlier launch file had a static transform that published that the map to odom transform was 'zero' from map to odom frames. This launch file removes that static transform and lets the AMCL package publish the map to odom transform or ```tf```. 
+
+
+## A Word About move_base avoids Dynamic Objects That May Move
+
+We are not using the more powerful move_base in this example (so far) to keep things as simple as possible.   If you choose to use move_base the planing is much more advanced but of course more things can then go wrong.
+ROS navigation stack can use detection of things that get in the way of the robot to then alter the path the robot was taking to the destination.   This is only mentioned here at this time as so far this simple demo does not use this feature.     Sensors such as sonar sensors can be used to detect things and place them in something called a ```costmap```.  The costmap can change as things move into and out of the path of the robot like your dog or cat or even yourself.
+
+The move_base code can dynamically re-think the path to be taken to avoid objects in the costmap.
 
     
 ## A word about the cruelty of the Real World
