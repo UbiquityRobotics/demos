@@ -109,7 +109,7 @@ Lets GO!
 Here we need to start the launch file and specify a map that will be used for navigation in whatever room or area you are in that has previously been mapped using gmapping and saved as a map.
 Edit magni_lidar_maprunner.launch to set the desired map.  We supply a tinyroom.map as an example but this is just a small square area and unless you duplicate it exactly this will not work for you.  It was about 1.9M x 1.5M if you have a bunch of cardboard you could start doing navigation without the making of the map part of this demo  
 
-    roslaunch magni_lidar magni_lidar_maprunnier.launch  
+    roslaunch magni_lidar magni_lidar_maprunner.launch  
 
 This launch file will strictly respect the odom information the robot keeps track of to determine robot position and rotation (called robot ```pose```).   The problem with this method is all robot odom only determination of pose drifts over time the more movements that take place.  So this method is ok for a short demo but not very usable in general real world situations.
 
@@ -164,7 +164,7 @@ The most common package that figures out where the robot it in the room (relativ
 
 Run the launch file below to use AMCL.  To use AMCL in any real world situation which may have a complex map you first have to use RViz to tell the robot where it is in the map.  
 
-    roslaunch magni_lidar magni_lidar_maprunnier_amcl.launch  
+    roslaunch magni_lidar magni_lidar_maprunner_amcl.launch  
 
 More things have to be all working nicely for reasonable results using AMCL so we suggest you get the odom only running first and only after that works move on to this example using AMCL.
 
