@@ -21,12 +21,16 @@ Unless we later install these on our images at this time, late 2020, these insta
     sudo apt install ros-kinetic-navigation
     sudo apt install ros-kinetic-slam-gmapping
 
-After the above installs to be prepaired to run navigation code you will also need the driver for the SlamTec RPLidar
+After the above installs to be prepaired to run navigation code you will also need the driver for the SlamTec RPLidar.
+There is a bug in how they setup the /scan topic ROS publisher so the ROS parameter of ```scan_topic_name``` does not work at the time of this writing, Oct 2020.  So I have edited the hard coded string they use as seen below before the make.
 
     cd ~/catkin_ws/src
     git clone https://github.com/sharp-rmf/rplidar_ros
     cd ~/catkin_ws
+    vi ~/catkin_ws/src/rp_lidar_ros/src/node.cpp
+    Edit to replace ```scan_topic_name``` with ```scan``` where ros::Publisher_scan_pub is setup 
     catkin_make
+    
 
 After the above steps you will need to decide on a location for the lidar and this location will have to be placed into the launch files below.   We are trying to keep things simple but there are ways in ros to have parameter files and so on and perhaps those may be added.   
 
@@ -54,7 +58,7 @@ Place the magni where you would like to be the origin of the map which will be X
 
 A launch file example to start a lidar, the RPLIDAR A1, and make the system ready for gmapping is in this repository.
 
-    roslaunch magni_rplidar_nav magni_lidar_mapmaker.launch
+    roslaunch magni_lidar magni_lidar_mapmaker.launch
 
 ## Publications
 Once the lidar is started, the /scan ROS topic will publish the lidar scan data.
