@@ -41,6 +41,8 @@
   <!--   <test_depend>gtest</test_depend> -->
   <buildtool_depend>catkin</buildtool_depend>
 
+  <!-- Add the need for rplidar driver node            -->
+  <run_depend>rplidar_ros</run_depend>
 
   <!-- The export tag contains other, unspecified, tags -->
   <export>
