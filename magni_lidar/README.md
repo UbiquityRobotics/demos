@@ -9,7 +9,7 @@ The full system here could be studied and investigated by learning more about su
 
 We will use a relatively low cost and very popular Slamtec  RPLidar A1 that is connected to the Magni raspberry pi USB and will by default in most cases show up as serial device /dev/ttyUSB0.  For these files the RPLidar is screwed to the top plate using 5mm spacers so the ribbon cable can bend around and allow their little USB board to be connected via USB cable to a port of the Raspberry Pi.
 
-The center of the lidar is centered in Y and is thus half way between each wheel but of course on top of the Magni top plate.  the motor and pully is on the rear side of the lidar.
+The center of the lidar is centered in Y and is thus half way between each wheel but of course on top of the Magni top plate.  The motor and pully is on the rear side of the lidar.
 
 To modify this example for use of other Lidars is best done after you understand this demo but even reading this demo set of instructions will offer you many things to investigate and research to go as far as you like with your own robot hardware.
 

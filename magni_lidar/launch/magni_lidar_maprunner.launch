@@ -43,7 +43,7 @@
   <!-- publish where base_frame is relative to base_link                                    --> 
   <node pkg="tf" type="static_transform_publisher" name="stp_base_link_to_base_frame" args="0.0 0.0 -0.1 0 0 0 /base_link /base_frame 20"/>
 
-  <!-- Add in child frame of rplider as it is not in our model yet                          -->
+  <!-- Add in child frame of rplidar as it is not in our model yet                          -->
   <node pkg="tf" type="static_transform_publisher" name="stp_base_link_laser" args="$(arg lidar_translation) /base_link /laser 20"/>
 
   <!-- Optionally we can add just the lidar as your robot model                             -->
