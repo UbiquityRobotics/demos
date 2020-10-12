@@ -1,0 +1,64 @@
+<launch>
+
+  <!-- Simple launch file for using rplidar A1 to generate a map with a Magni default image -->
+  <!-- This assumes normal Magni Robot service of magni-base is running already             -->
+  <!-- 1) Setup the rplidar serial_port to your own serial port. ttyUSB0 is very normal     -->
+  <!-- 2) If you want the lidar to show up in rviz you must modify the magni urdf file      -->
+  <!-- 3) Setup the base_link_to_laser translation in ROS standard  x y z  r p y  form      -->
+  <!-- Run using:      roslaunch magni_lidar magni_lidar_maprunner.launch                   -->
+  <!-- Run move_base:  roslaunch magni_nav move_base.launch (typically run in new window)   -->
+  <!-- Define new locations to move the robot using 2D Nav Goals in Rviz and live the dream -->
+
+  <param name="/use_sime_time" value="true"/>
+
+  <!-- Arguments that could be supplied to this launch file or edited here                  -->
+  <arg name="robot_model" default="$(find magni_lidar)/rplidar.urdf"/>                      -->
+  <arg name="map_yaml" default="$(find magni_lidar)/maps/tinyroom.yaml" /><!-- your map     -->
+  <arg name="lidar_serial_port" default="/dev/ttyUSB0"/><!-- rplidar serial port            -->
+  <arg name="lidar_serial_baud" default="115200"/><!-- rate for rplidar A1/A2               -->
+
+  <!-- Define the 3d space x,y,z translation and rotations from base_link to the lidar      -->
+  <arg name="lidar_translation" default="-0.03 0 0.20 0 3.14 3.14"/><!-- base_link to lidar laser -->
+
+  <!-- Run the map server  and have robo_mag/maps/roommap.yaml by symlink to map in use   -->
+  <node name="map_server" pkg="map_server" type="map_server" args="$(arg map_yaml)">
+    <param name="frame_id" value="map"/>
+  </node>
+
+  <!-- Start the rplidar node built from https://github.com/sharp-rmf/rplidar_ros          -->
+  <node name="rplidarNode"          pkg="rplidar_ros"  type="rplidarNode" output="screen">
+    <param name="serial_port"         type="string" value="$(arg lidar_serial_port)"/>
+    <param name="serial_baudrate"     type="int"    value="$(arg lidar_serial_baud)"/>
+    <param name="frame_id"            type="string" value="laser"/>
+    <param name="inverted"            type="bool"   value="false"/>
+    <param name="angle_compensate"    type="bool"   value="true"/>
+  </node>
+
+  <!-- Publish the map to odom transform  as 0 if we are not using amcl                     -->
+  <node pkg="tf" type="static_transform_publisher" name="stp_map_to_odom" args="0.0 0.0 0.0 0 0 0.0 /map /odom 20"/>
+
+  <!-- Optionally set an identity transform so base_footprint is same as base_frame         -->
+  <node pkg="tf" type="static_transform_publisher" name="stp_base_footprint_to_base_frame" args="0.0 0.0 0.0 0 0 0 /base_footprint /base_frame 20"/>
+
+  <!-- publish where base_frame is relative to base_link                                    --> 
+  <node pkg="tf" type="static_transform_publisher" name="stp_base_link_to_base_frame" args="0.0 0.0 -0.1 0 0 0 /base_link /base_frame 20"/>
+
+  <!-- Add in child frame of rplidar as it is not in our model yet                          -->
+  <node pkg="tf" type="static_transform_publisher" name="stp_base_link_laser" args="$(arg lidar_translation) /base_link /laser 20"/>
+
+  <!-- Optionally we can add just the lidar as your robot model                             -->
+  <!-- Ideally the lidar should be added to the magni urdf model but that can be complex    -->
+  <!--
+  <param name="robot_description" textfile="$(arg robot_model)" />
+  <node name="robot_state_publisher" pkg="robot_state_publisher" type="state_publisher">
+    <param name="publish_frequency" value="20.0"/>
+  </node>
+  -->
+
+  <!-- Automatically Start move basic for navigation. Or start manually -->
+  <!-- Manual move_basic start:  roslaunch magni_nav move_basic.launch  -->
+  <!--
+  <include file="$(find magni_nav)/launch/move_basic.launch" />
+  -->
+
+</launch>

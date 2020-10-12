@@ -1,0 +1,46 @@
+<launch>
+
+  <!-- Simple launch file for using rplidar A1 to generate a map with a Magni default image -->
+  <!-- This assumes normal Magni Robot service of magni-base is running already             -->
+  <!-- 1) Setup the rplidar serial_port to your own serial port. ttyUSB0 is very normal     -->
+  <!-- 2) If you want the lidar to show up in rviz you must modify the magni urdf file      -->
+  <!-- 3) Setup the base_link_to_laser translation in ROS standard  x y z  r p y  form      -->
+  <!-- Run using:    roslaunch magni_lidar magni_lidar_mapmaker.launch                      -->
+  <!-- Run gmapping: rosrun gmapping slam_gmapping scan:=scan (typically run in new window) -->
+  <!-- Drive around to make map then save it:  rosrun map_server map_saver -f mynewmap-ils  -->
+
+  <param name="/use_sime_time" value="true"/>
+
+  <!-- Arguments that could be supplied to this launch file or edited here                  -->
+  <arg name="robot_model" default="$(find magni_lidar)/rplidar.urdf"/>                      -->
+  <arg name="lidar_serial_port" default="/dev/ttyUSB0"/><!-- rplidar serial port            -->
+  <arg name="lidar_serial_baud" default="115200"/><!-- rate for rplidar A1/A2               -->
+
+  <!-- Define the 3d space x,y,z translation and rotational angles for this lidar           -->
+  <arg name="lidar_translation" default="-0.03 0 0.20 0 3.14 3.14"/><!-- base_link to lidar laser -->
+
+
+  <!-- Start the rplidar node built from https://github.com/sharp-rmf/rplidar_ros          -->
+  <node name="rplidarNode"          pkg="rplidar_ros"  type="rplidarNode" output="screen">
+    <param name="serial_port"         type="string" value="$(arg lidar_serial_port)"/>
+    <param name="serial_baudrate"     type="int"    value="$(arg lidar_serial_baud)"/>
+    <param name="frame_id"            type="string" value="laser"/>
+    <param name="inverted"            type="bool"   value="false"/>
+    <param name="angle_compensate"    type="bool"   value="true"/>
+  </node>
+
+  <node pkg="tf" type="static_transform_publisher" name="map_to_odom" args="0.0 0.0 0.0 0 0 0.0 /map /odom 20"/>
+
+  <!-- Add in child frame of rplider as it is not in our model yet -->
+  <node pkg="tf" type="static_transform_publisher" name="base_link_to_laser" args="$(arg lidar_translation) /base_link /laser 20"/>
+
+  <!-- Optionally we can add just the lidar as your robot model                             -->
+  <!-- Ideally the lidar should be added to the magni urdf model but that can be complex    -->
+  <!--
+  <param name="robot_description" textfile="$(arg robot_model)" />
+  <node name="robot_state_publisher" pkg="robot_state_publisher" type="state_publisher">
+    <param name="publish_frequency" value="20.0"/>
+  </node>
+  -->
+
+</launch>

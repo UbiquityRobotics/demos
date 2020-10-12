@@ -1,0 +1,25 @@
+<launch>
+
+  <!-- Launch file for using RPLidar A1                                                     -->
+  <!-- Dependency: Get RPLidar driver to catkin_ws from src folder                          -->
+  <!--   git clone https://github.com/sharp-rmf/rplidar_ros and set serial if not ttyUSB0   -->
+
+  <param name="/use_sime_time" value="true"/>
+
+  <!-- Arguments that could be supplied to this launch file or edited here                  -->
+  <!-- As of Sept 2020 the RPlidar node scan topic name is not read right but its here      -->
+  <arg name="scan_topic_name"   default="scan"/><!-- rplidar topic for LaserScan data       -->
+  <arg name="lidar_serial_port" default="/dev/ttyUSB0"/><!-- rplidar serial port            -->
+  <arg name="lidar_serial_baud" default="115200"/><!-- rate for rplidar A1/A2               -->
+
+  <!-- Start the rplidar node built from https://github.com/sharp-rmf/rplidar_ros          -->
+  <node name="rplidarNode"          pkg="rplidar_ros"  type="rplidarNode" output="screen">
+    <param name="scan_topic_name"     type="string" value="$(arg scan_topic_name)"/>
+    <param name="serial_port"         type="string" value="$(arg lidar_serial_port)"/>
+    <param name="serial_baudrate"     type="int"    value="$(arg lidar_serial_baud)"/>
+    <param name="frame_id"            type="string" value="laser"/>
+    <param name="inverted"            type="bool"   value="false"/>
+    <param name="angle_compensate"    type="bool"   value="true"/>
+  </node>
+
+</launch>

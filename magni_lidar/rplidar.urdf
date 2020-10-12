@@ -1,0 +1,57 @@
+<?xml version="1.0"?>
+<robot name="materials">
+
+  <material name="black">
+    <color rgba="0 0 0 1"/>
+  </material>
+  <material name="near_black">
+    <color rgba="0.3 0.3 0.3 1"/>
+  </material>
+  <material name="gray">
+    <color rgba="0.7 0.7 0.7 1"/>
+  </material>
+  <material name="white">
+    <color rgba="1 1 1 1"/>
+  </material>
+
+  <-- Define references the lidar can be translated from in the model -->
+  <link name="base_frame">
+    <visual>
+      <geometry>
+        <cylinder length="0.005" radius="0.045"/>
+      </geometry>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+    </visual>
+  </link>
+
+  <link name="base_link">
+    <visual>
+      <geometry>
+        <sphere radius="0.010"/>
+      </geometry>
+    </visual>
+  </link>
+  <joint name="base_frame_to_base_link" type="fixed">
+    <parent link="base_frame"/>
+    <child link="base_link"/>
+    <origin xyz="-0.0 0.0 0.05"/>
+  </joint>
+
+  <!-- rplidar  -->
+  <link name="rplidar">
+    <visual>
+      <geometry>
+        <cylinder length="0.06" radius="0.038"/>
+      </geometry>
+      <origin rpy="0 0 0" xyz="0 0 0"/>
+      <material name="near_black"/>
+    </visual>
+  </link>
+  <joint name="rplidar_joint" type="fixed">
+
+    <parent link="base_link"/>
+    <child link="rplidar"/>
+    <origin xyz="-0.0 0 0.2" rpy="0 0 0"/>
+  </joint>
+
+</robot>
