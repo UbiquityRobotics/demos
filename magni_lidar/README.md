@@ -7,11 +7,19 @@ Our goal here is to put in one place the key elements of robot navigation using 
 
 The full system here could be studied and investigated by learning more about such things as ROS /tf topic and the lidar itself as well as how ROS understands the orientation of sensors in 3D space.   Plenty to learn but this is a known starting point as an example.
 
-We will use a relatively low cost and very popular Slamtec  RPLidar A1 that is connected to the Magni raspberry pi USB and will by default in most cases show up as serial device /dev/ttyUSB0.  For these files the RPLidar is screwed to the top plate using 5mm spacers so the ribbon cable can bend around and allow their little USB board to be connected via USB cable to a port of the Raspberry Pi.
+# The RPLidar Mechanical And USB Connectivity
+
+We will use a relatively low cost and very popular Slamtec  RPLidar A1 that is connected to the Magni raspberry pi USB and will by default in most cases show up as serial device /dev/ttyUSB0.  
+
+For these launch files the RPLidar is screwed to the top plate using 5mm spacers so the ribbon cable can bend around and allow their little USB board to be connected via USB cable to a port of the Raspberry Pi.
 
 The center of the lidar is centered in Y and is thus half way between each wheel but of course on top of the Magni top plate.  The motor and pully is on the rear side of the lidar.
 
-To modify this example for use of other Lidars is best done after you understand this demo but even reading this demo set of instructions will offer you many things to investigate and research to go as far as you like with your own robot hardware.
+To modify this example for use of other Lidars is best done after you understand this demo but even reading this demo set of instructions will offer you many things to investigate and research to go as far as you like with your own robot hardware.   Below is the line that defines the location as we have mounted it in the picture called  RPLidar_MagniLidarDemoMounting.jpg
+
+    arg name="lidar_translation" default="-0.03 0 0.20 0 3.14 3.14"
+
+There are 6 floating point values.   First 3 are X,Y,Z translation in meters from our 'base_link' or a spot in space located directly between the centers of our two large main drive wheels. Z is not at all critical because the lidar only generates data in the 2D  plane of X and Y so don't worry about exact height of lidar.   The next 3 values will make your head spin to think much about them but in short they are the rotations in radians about the X,Y,Z axis.  You need to do your own research if you have the lidar in any other rotation than the picture. 
 
 # ROS Configuration Required To Run these sets of demo launch files
 
