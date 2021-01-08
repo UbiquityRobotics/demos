@@ -1,0 +1,24 @@
+TrajectoryPlannerROS:
+  # define realistic max and min limits for speed and rotation. Best to 'not rush things'
+  max_vel_x: 0.45
+  min_vel_x: 0.05
+  max_vel_theta: 1.0
+  min_in_place_vel_theta: 0.3
+
+  # define realistic max and min acceleration limits. Best to 'not rush things'
+  acc_lim_theta: 2.2
+  acc_lim_x: 1.5
+  acc_lim_y: 1.5
+
+  # Only set to true if your robot can do straffing velocity commands
+  holonomic_robot: false
+
+  # Set goal tolerances as loose as possible, too fine and robot takes long time to find goal
+  yaw_goal_tolerance:  0.2
+  xy_goal_tolerance: 0.1
+
+  # use Dynamic Window Approach (default true) which is less computationally intensive than Trajectory Rollout
+  dwa: true
+
+  # oscillation can be subdued more or less using this.  Defaults to 0.05
+  oscillation_reset_dist: 0.05
