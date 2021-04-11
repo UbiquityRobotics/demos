@@ -46,6 +46,12 @@ class SonarWanderer:
     Constructor for our class
     """
 
+    # Fetch new average value from current average value and new value using 
+    # a fractional weight from 0 - 1.0 for the new value
+    def runningAverage(self, currentAvgValue, newValue, newWeight):
+        newAvgValue = (newValue * newWeight) + (currentAvgValue * (1.0 - newWeight))
+        return newAvgValue
+
     """
     Called when a sonar message is received
     """
@@ -53,24 +59,29 @@ class SonarWanderer:
         imageTime = msg.header.stamp
         self.linSpeed = 0
 
-        print imageTime, rospy.Time.now()
-        print "*****"
-        found = False
-
         # pick off the ranges for the sensors we are going to use for detection
         # look for msg->header.frame_id where  sonar_3=front, sonar_2=right, sonar_1=left
         sonarId = msg.header.frame_id
+        sonarRange = msg.range
         
+        found = False
+
+        # we do a simple running average for the ranges
         if sonarId == "sonar_3":
-            self.range_front = 2.0
+            self.range_front = self.runningAverage(self.range_front, sonarRange, self.new_range_weight)
         if sonarId == "sonar_2":
-            self.range_right = 2.0
+            self.range_right = self.runningAverage(self.range_right, sonarRange, self.new_range_weight)
         if sonarId == "sonar_1":
-            self.range_left  = 2.0
+            self.range_left  = self.runningAverage(self.range_left,  sonarRange, self.new_range_weight)
+
+        print "SonarRanges: ", str(self.range_left)[:6], str(self.range_front)[:6], str(self.range_right)[:6]
 
     def __init__(self):
        global sonar_callback
        rospy.init_node('sonar_wanderer')
+
+       # get a starting time so our time printouts are relative to script start
+       self.startTime = rospy.Time.now()
 
        # A publisher for robot motion commands
        self.cmdPub = rospy.Publisher("/cmd_vel", Twist, queue_size=1)
@@ -78,13 +89,17 @@ class SonarWanderer:
        # Subscribe to sonar messages
        self.sonarSub = rospy.Subscriber("/sonars", Range, self.sonar_callback)
 
-       # Setup very far distances for initial sonar detection ranges
-       self.range_front = 99.9 
-       self.range_right = 99.9 
-       self.range_left  = 99.9 
+       # Setup very far distances for initial sonar detection ranges so we are not blocked from start
+       self.range_front = 5.0
+       self.range_right = 5.0
+       self.range_left  = 5.0
+       self.new_range_weight = 0.25
 
        # Flag to avoid sending repeated zero speeds
        self.suppressCmd = False
+
+       # allow user to set weight of the newest sonar range in running average
+       self.new_range_weight = rospy.get_param("~new_range_weight", 0.25)
 
        # Minimum distance we want the robot to be from objects it detects
        self.min_dist = rospy.get_param("~min_dist", 0.6)
@@ -103,10 +118,6 @@ class SonarWanderer:
 
        # Maximum linear speed (meters/second)
        self.max_linear_rate = rospy.get_param("~max_linear_rate", 1.5)
-
-       # Linear speed decay (meters/second)
-       self.linear_decay = rospy.get_param("~linear_decay", 0.9)
-
 
 
     """
