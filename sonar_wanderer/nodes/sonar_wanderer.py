@@ -111,10 +111,10 @@ class SonarWanderer:
 
        # Define the limits where we consider action is required for detected objects out front
        # The Minimum distance we want the robot to be from objects is defined for out front
-       self.min_dist = rospy.get_param("~min_dist", 0.8)
-       self.limit_front = self.min_dist
-       self.limit_right = self.min_dist * 1.3
-       self.limit_left  = self.min_dist * 1.3
+       self.detect_dist = rospy.get_param("~detect_dist", 0.8)
+       self.limit_front = self.detect_dist
+       self.limit_right = self.detect_dist * 1.3
+       self.limit_left  = self.detect_dist * 1.3
 
        # The rate to drive the robot when wandering in M/sec
        self.linear_rate = rospy.get_param("~linear_rate", 0.2)
