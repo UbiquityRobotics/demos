@@ -71,13 +71,13 @@ class SonarWanderer:
         found = False
 
         # we do a simple running average for the ranges that we care about
-        if sonarId == "sonar_3":
-            self.range_front = self.runningAverage(self.range_front, sonarRange, self.new_range_weight)
+        # we have added 0.1 for the left in the callback as the sonar is off to the right about that much
+        if sonarId == "sonar_1":
+            self.range_left  = self.runningAverage(self.range_left,  sonarRange, self.new_range_weight)
         if sonarId == "sonar_2":
             self.range_right = self.runningAverage(self.range_right, sonarRange, self.new_range_weight)
-        if sonarId == "sonar_1":
-            sonarRange += 0.1   # to keep main logic simpler adjust left as that sensor is to the right
-            self.range_left  = self.runningAverage(self.range_left,  sonarRange, self.new_range_weight)
+        if sonarId == "sonar_3":
+            self.range_front = self.runningAverage(self.range_front, sonarRange, self.new_range_weight)
 
         if self.debug_prints > 0:
             print "SonarRanges: ", str(self.range_left)[:6], str(self.range_front)[:6], str(self.range_right)[:6]
@@ -104,23 +104,23 @@ class SonarWanderer:
        self.new_range_weight = rospy.get_param("~new_range_weight", 0.25)
 
        # Setup very far distances for initial sonar detection ranges so we are not blocked from start
-       self.range_front = 5.0
-       self.range_right = 5.0
-       self.range_left  = 5.0
+       self.range_front = 2.0
+       self.range_right = 2.0
+       self.range_left  = 2.0
        self.new_range_weight = 0.25
 
        # Define the limits where we consider action is required for detected objects out front
        # The Minimum distance we want the robot to be from objects is defined for out front
-       self.min_dist = rospy.get_param("~min_dist", 0.6)
+       self.min_dist = rospy.get_param("~min_dist", 0.8)
        self.limit_front = self.min_dist
-       self.limit_right = self.min_dist * 1.4
-       self.limit_left  = self.min_dist * 1.4
+       self.limit_right = self.min_dist * 1.3
+       self.limit_left  = self.min_dist * 1.3
 
        # The rate to drive the robot when wandering in M/sec
        self.linear_rate = rospy.get_param("~linear_rate", 0.2)
 
        # The rate to rotate when avoiding an object
-       self.angular_rate = rospy.get_param("~angular_rate", 1.5)
+       self.angular_rate = rospy.get_param("~angular_rate", 0.7)
 
 
     """
@@ -148,7 +148,7 @@ class SonarWanderer:
                 if self.range_front < self.limit_front:   # detect object straight ahead
                     linSpeed = 0.0
                     # Make decisions on rotation time based Pi/2 turn
-                    rotation_duration = (6.28/4) / self.angular_rate
+                    rotation_duration = (6.28/8) / self.angular_rate
 
                     # make a decision on way to rotate by turning where side sensor has more range
                     if self.range_left > self.range_right:
@@ -161,14 +161,14 @@ class SonarWanderer:
                             print "Avoid object in front by rotation of 90 deg to right"
                 elif self.range_right < self.limit_right: # detect object on the right but not close in front
                         angSpeed = self.angular_rate
-                        rotation_duration = (6.28/8) / self.angular_rate
+                        rotation_duration = (6.28/16) / self.angular_rate
                         if self.debug_prints > 0:
                             print "Avoid object to the right by rotation of 45 deg to the left"
                 elif self.range_left  < self.limit_left:
                         angSpeed = -1.0 * self.angular_rate
-                        rotation_duration = (6.28/8) / self.angular_rate
+                        rotation_duration = (6.28/16) / self.angular_rate
                         if self.debug_prints > 0:
-                            print "Avoid object to the right by rotation of 45 deg to the left"
+                            print "Avoid object to the right by rotation of 45 deg to the right"
                 else:
                     # not rotating and no object within limits.  Just drive forward
                     if self.debug_prints > 0:
