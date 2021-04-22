@@ -36,14 +36,23 @@ Sonar Wanderer Demo.  Receive sonar range data and wander around avoiding object
 import rospy
 from geometry_msgs.msg import TransformStamped, Twist
 from sensor_msgs.msg import Range
+from std_msgs.msg import Bool
 from math import pi, sqrt, atan2
 import traceback
 import math
 import time
+import signal
+import sys
 
 
 def degrees(r):
     return 180.0 * r / math.pi
+
+# Trap to exit the program on Control C from keyboard
+def signal_handler(sig, frame):
+    print(' ')
+    print('Exit due to detection of Ctrl+C!')
+    sys.exit(0)
 
 # This class implements the principles of sonar topic reading and acting
 # on detected objects to modify movement on the cmd_vel topic
@@ -79,14 +88,26 @@ class SonarWanderer:
         if sonarId == "sonar_3":
             self.range_front = self.runningAverage(self.range_front, sonarRange, self.new_range_weight)
 
-        if self.debug_prints > 0:
+        if self.debug_prints > 0 and self.motors_enabled == True:
             print "SonarRanges: ", str(self.range_left)[:6], str(self.range_front)[:6], str(self.range_right)[:6]
 
+    """
+    Called when a motor_power_active message is received
+    """
+    def motor_power_callback(self, msg):
+        self.motor_power_on = msg.data
+
+    """
+    Main node control
+    """
     def __init__(self):
        global sonar_callback
        rospy.init_node('sonar_wanderer')
 
        self.debug_prints = 1
+
+       # allow for exit using Control-C from keyboard
+       signal.signal(signal.SIGINT, signal_handler)    
 
        # get a starting time so our time printouts are relative to script start
        self.startTime = rospy.Time.now()
@@ -97,11 +118,18 @@ class SonarWanderer:
        # Subscribe to sonar messages
        self.sonarSub = rospy.Subscriber("/sonars", Range, self.sonar_callback)
 
+       # Subscribe to topic to know if motor power is on or off
+       self.motorPowerSub = rospy.Subscriber("/motor_power_active", Bool, self.motor_power_callback)
+
        # Flag to avoid sending repeated zero speeds
        self.suppressCmd = False
 
        # allow user to set weight of the newest sonar range in running average
        self.new_range_weight = rospy.get_param("~new_range_weight", 0.25)
+
+       # Setup to assume motor power is on as we start
+       self.motor_power_on = True
+       self.motors_enabled = True
 
        # Setup very far distances for initial sonar detection ranges so we are not blocked from start
        self.range_front = 2.0
@@ -111,7 +139,7 @@ class SonarWanderer:
 
        # Define the limits where we consider action is required for detected objects out front
        # The Minimum distance we want the robot to be from objects is defined for out front
-       self.detect_dist = rospy.get_param("~detect_dist", 0.8)
+       self.detect_dist = rospy.get_param("~detect_dist", 1.0)
        self.limit_front = self.detect_dist
        self.limit_right = self.detect_dist * 1.3
        self.limit_left  = self.detect_dist * 1.3
@@ -138,14 +166,31 @@ class SonarWanderer:
 
         rotation_duration = 0      # time to be rotating to avoid object
 
+        self.motors_enabled = True
+
         # While our node is running
         while not rospy.is_shutdown():
             # We are keeping this very simple in this demo so up to user to make it 'smarter'
             # we will have 2 simple modes. 1 is driving forward and another is doing a rotation
+
+            # special handling if motor power is off
+            if self.motor_power_on == False:
+                if self.motors_enabled == True:
+                    print "Motor power was turned off. Pause till it is back on again."
+                self.motors_enabled = False
+            else:
+                if self.motors_enabled == False:
+                    print "Motor power has been re-enabled. Continue operation."
+                self.motors_enabled = True
+
             if rotation_duration > 0.0:
                 rotation_duration -= loopRateSec   # remain in rotation mode till correction is done
             else:
-                if self.range_front < self.limit_front:   # detect object straight ahead
+                if self.motors_enabled == False:
+                    # Suspend operation when power is off
+                    rate.sleep()
+
+                elif self.range_front < self.limit_front:   # detect object straight ahead
                     linSpeed = 0.0
                     # Make decisions on rotation time based Pi/2 turn
                     rotation_duration = (6.28/8) / self.angular_rate
@@ -159,25 +204,29 @@ class SonarWanderer:
                         angSpeed = -1.0 * self.angular_rate
                         if self.debug_prints > 0:
                             print "Avoid object in front by rotation of 90 deg to right"
+
                 elif self.range_right < self.limit_right: # detect object on the right but not close in front
                         angSpeed = self.angular_rate
                         rotation_duration = (6.28/16) / self.angular_rate
                         if self.debug_prints > 0:
                             print "Avoid object to the right by rotation of 45 deg to the left"
+
                 elif self.range_left  < self.limit_left:
                         angSpeed = -1.0 * self.angular_rate
                         rotation_duration = (6.28/16) / self.angular_rate
                         if self.debug_prints > 0:
                             print "Avoid object to the right by rotation of 45 deg to the right"
+
                 else:
                     # not rotating and no object within limits.  Just drive forward
                     if self.debug_prints > 0:
-                        print "Drive forward with no objects within limits now"
+                        print "Drive forward"
                     rotation_duration = 0.0
                     angSpeed = 0.0
                     linSpeed = self.linear_rate
                 
-            print "Speeds: linear %f angular %f" % (linSpeed, angSpeed)
+            if self.motors_enabled == True:
+                print "Speeds: lin %f ang %f" % (linSpeed, angSpeed)
 
             # Create a Twist message from the velocities and publish it
             # Avoid sending repeated zero speed commands, so teleop
@@ -185,7 +234,7 @@ class SonarWanderer:
             zeroSpeed = (angSpeed == 0 and linSpeed == 0)
             if not zeroSpeed:
                 self.suppressCmd = False
-            print "zero", zeroSpeed, self.suppressCmd
+            
             if not self.suppressCmd:
                 twist = Twist()
                 twist.angular.z = angSpeed
