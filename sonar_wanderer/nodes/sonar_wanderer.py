@@ -89,7 +89,7 @@ class SonarWanderer:
             self.range_front = self.runningAverage(self.range_front, sonarRange, self.new_range_weight)
 
         if self.debug_prints > 0 and self.motors_enabled == True:
-            print "SonarRanges: ", str(self.range_left)[:6], str(self.range_front)[:6], str(self.range_right)[:6]
+            print("SonarRanges: ", str(self.range_left)[:6], str(self.range_front)[:6], str(self.range_right)[:6])
 
     """
     Called when a motor_power_active message is received
@@ -156,7 +156,7 @@ class SonarWanderer:
     """
     def run(self):
         # setup for looping at 20hz
-        loopRateSec = 0.05
+        loopRateSec = 0.035
         rate = rospy.Rate(1/loopRateSec)
 
         # Setup the variables that we will use later
@@ -176,11 +176,11 @@ class SonarWanderer:
             # special handling if motor power is off
             if self.motor_power_on == False:
                 if self.motors_enabled == True:
-                    print "Motor power was turned off. Pause till it is back on again."
+                    print("Motor power was turned off. Pause till it is back on again.")
                 self.motors_enabled = False
             else:
                 if self.motors_enabled == False:
-                    print "Motor power has been re-enabled. Continue operation."
+                    print("Motor power has been re-enabled. Continue operation.")
                 self.motors_enabled = True
 
             if rotation_duration > 0.0:
@@ -199,34 +199,34 @@ class SonarWanderer:
                     if self.range_left > self.range_right:
                         angSpeed = self.angular_rate
                         if self.debug_prints > 0:
-                            print "Avoid object in front by rotation of 90 deg to left"
+                            print("Avoid object in front by rotation of 90 deg to left")
                     else:
                         angSpeed = -1.0 * self.angular_rate
                         if self.debug_prints > 0:
-                            print "Avoid object in front by rotation of 90 deg to right"
+                            print("Avoid object in front by rotation of 90 deg to right")
 
                 elif self.range_right < self.limit_right: # detect object on the right but not close in front
                         angSpeed = self.angular_rate
                         rotation_duration = (6.28/16) / self.angular_rate
                         if self.debug_prints > 0:
-                            print "Avoid object to the right by rotation of 45 deg to the left"
+                            print("Avoid object to the right by rotation of 45 deg to the left")
 
                 elif self.range_left  < self.limit_left:
                         angSpeed = -1.0 * self.angular_rate
                         rotation_duration = (6.28/16) / self.angular_rate
                         if self.debug_prints > 0:
-                            print "Avoid object to the right by rotation of 45 deg to the right"
+                            print("Avoid object to the right by rotation of 45 deg to the right")
 
                 else:
                     # not rotating and no object within limits.  Just drive forward
                     if self.debug_prints > 0:
-                        print "Drive forward"
+                        print("Drive forward")
                     rotation_duration = 0.0
                     angSpeed = 0.0
                     linSpeed = self.linear_rate
                 
             if self.motors_enabled == True:
-                print "Speeds: lin %f ang %f" % (linSpeed, angSpeed)
+                print("Speeds: lin %f ang %f" % (linSpeed, angSpeed))
 
             # Create a Twist message from the velocities and publish it
             # Avoid sending repeated zero speed commands, so teleop
