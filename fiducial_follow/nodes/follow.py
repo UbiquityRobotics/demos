@@ -1,5 +1,3 @@
-#!/usr/bin/python
-
 """
 Copyright (c) 2017, Ubiquity Robotics
 All rights reserved.
@@ -112,8 +110,8 @@ class Follow:
         imageTime = msg.header.stamp
         self.linSpeed = 0
 
-        print imageTime, rospy.Time.now()
-        print "*****"
+        print (imageTime, rospy.Time.now())
+        print ("*****")
         found = False
 
         # For every fiducial found by the dectector, publish a transform
@@ -121,9 +119,8 @@ class Follow:
             id = m.fiducial_id
             trans = m.transform.translation
             rot = m.transform.rotation
-            print "Fid %d %lf %lf %lf %lf %lf %lf %lf\n" % \
-                                 (id, trans.x, trans.y, trans.z,
-                                  rot.x, rot.y, rot.z, rot.w)
+            print ("Fid %d %lf %lf %lf %lf %lf %lf %lf\n" % \
+                  (id, trans.x, trans.y, trans.z, rot.x, rot.y, rot.z, rot.w))
             t = TransformStamped()
             t.child_frame_id = "fid%d" % id
             t.header.frame_id = msg.header.frame_id
@@ -151,8 +148,8 @@ class Follow:
             tf = self.tfBuffer.lookup_transform("base_link", self.target_fiducial, imageTime)
             ct = tf.transform.translation
             cr = tf.transform.rotation
-            print "T_fidBase %lf %lf %lf %lf %lf %lf %lf\n" % \
-                             (ct.x, ct.y, ct.z, cr.x, cr.y, cr.z, cr.w)
+            print ("T_fidBase %lf %lf %lf %lf %lf %lf %lf\n" % \
+                             (ct.x, ct.y, ct.z, cr.x, cr.y, cr.z, cr.w))
 
             # Set the state varibles to the position of the fiducial
             self.fid_x = ct.x
@@ -160,7 +157,7 @@ class Follow:
             self.got_fid = True
         except:
             traceback.print_exc()
-            print "Could not get tf for %s" % self.target_fiducial
+            print ("Could not get tf for %s" % self.target_fiducial)
 
 
     """
@@ -185,8 +182,8 @@ class Follow:
             # atan2 works for any point on a circle (as opposed to atan)
             angular_error = math.atan2(self.fid_y, self.fid_x)
 
-            print "Errors: forward %f lateral %f angular %f" % \
-              (forward_error, lateral_error, degrees(angular_error))
+            print ("Errors: forward %f lateral %f angular %f" % \
+              (forward_error, lateral_error, degrees(angular_error)))
 
             if self.got_fid:
                 times_since_last_fid = 0
@@ -194,7 +191,7 @@ class Follow:
                 times_since_last_fid += 1
 
             if forward_error > self.max_dist:
-                print "Fiducial is too far away"
+                print ("Fiducial is too far away")
                 linSpeed = 0
                 angSpeed = 0
             # A fiducial was detected since last iteration of this loop
@@ -232,12 +229,12 @@ class Follow:
                     angSpeed = self.lost_angular_rate
                 else:
                     angSpeed = 0
-                print "Try keep rotating to refind fiducial: try# %d" % times_since_last_fid
+                print ("Try keep rotating to refind fiducial: try# %d" % times_since_last_fid)
             else:
                 angSpeed = 0
                 linSpeed = 0
 
-            print "Speeds: linear %f angular %f" % (linSpeed, angSpeed)
+            print ("Speeds: linear %f angular %f" % (linSpeed, angSpeed))
 
             # Create a Twist message from the velocities and publish it
             # Avoid sending repeated zero speed commands, so teleop
@@ -245,7 +242,7 @@ class Follow:
             zeroSpeed = (angSpeed == 0 and linSpeed == 0)
             if not zeroSpeed:
                 self.suppressCmd = False
-            print "zero", zeroSpeed, self.suppressCmd
+            print ("zero", zeroSpeed, self.suppressCmd)
             if not self.suppressCmd:
                 twist = Twist()
                 twist.angular.z = angSpeed
@@ -264,3 +261,4 @@ if __name__ == "__main__":
     node = Follow()
     # run it
     node.run()
+    
