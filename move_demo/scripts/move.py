@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 
 """
 Copyright (c) 2018, Ubiquity Robotics
@@ -111,11 +111,11 @@ class Move:
         self.goto_goal(position=Point(dist, 0, 0))
 
 def usage():
-    print \
+    print (\
 """Usage: %s rotate|forward amount
   rotate <angle in degrees>
   forward <distance in meters>
-""" % sys.argv[0]
+""" % sys.argv[0])
     sys.exit(1)
 
 
