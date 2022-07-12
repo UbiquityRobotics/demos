@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 
 """
 Copyright (c) 2018, Ubiquity Robotics
@@ -120,7 +120,7 @@ class Rotate:
             best_target = None
             best_confidence = 0.0
             for object in detect_resp.result.objects:
-                print object
+                print (object)
                 if object.class_name == target:
                     found_target = True
                     if object.confidence > best_confidence:
